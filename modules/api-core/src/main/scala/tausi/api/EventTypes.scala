@@ -83,7 +83,7 @@ object EventHandle:
   given CanEqual[EventHandle, EventHandle] = CanEqual.derived
 
   extension (handle: EventHandle)
-    def unlisten()(using ExecutionContext): Future[Either[TauriError, Unit]] =
+    def unlisten()(using ExecutionContext): Future[Unit] =
       tausi.api.event.unlisten(handle)
 
 /** Tauri-provided event constants. */

@@ -34,8 +34,8 @@ import tausi.api.internal.*
   * This object contains the primary interface for interacting with the Tauri runtime from the
   * frontend. It mirrors the structure of Tauri's core.ts API.
   *
-  * All functions return Either[TauriError, T] wrapped in Future for async operations. This provides
-  * explicit error handling and composability.
+  * Async functions return Future[T] with errors propagated through the Future's failure channel,
+  * wrapped in TauriError. Allows for use with preferred effect systems (cats-effect, ZIO).
   */
 object core:
   /** Check if the code is running inside a Tauri application.
@@ -89,31 +89,36 @@ object core:
     * This is the primary way to call Rust commands from the frontend. Commands must be registered
     * in the Tauri application builder.
     *
+    * Errors are propagated through the Future's failure channel and wrapped in TauriError. This
+    * includes both Rust Result::Err values and unexpected errors (serialization, IPC failures).
+    *
     * @param cmd The command name
     * @param ec Execution context for async operations
     * @tparam T The expected return type
-    * @return Future containing Either a TauriError or the result
+    * @return Future that succeeds with T or fails with TauriError
     *
     * @example
     *   {{{
     * import tausi.api.core.*
     *
     * // Invoke a simple command with no args
-    * invoke[String]("get_app_version")
+    * invoke[String]("get_app_version").map(version => println(version))
     *   }}}
     */
   inline def invoke[T](
     cmd: String
-  )(using ec: ExecutionContext): Future[Either[TauriError, T]] =
+  )(using ec: ExecutionContext): Future[T] =
     invoke[T](cmd, js.Dictionary.empty, InvokeOptions.empty)
 
   /** Invoke a Tauri command with arguments.
+    *
+    * Errors are propagated through the Future's failure channel and wrapped in TauriError.
     *
     * @param cmd The command name
     * @param args The command arguments
     * @param ec Execution context for async operations
     * @tparam T The expected return type
-    * @return Future containing Either a TauriError or the result
+    * @return Future that succeeds with T or fails with TauriError
     *
     * @example
     *   {{{
@@ -121,19 +126,23 @@ object core:
     *
     * // Invoke with arguments
     * invoke[String]("greet", js.Dictionary("name" -> "World"))
+    *   .map(greeting => println(greeting))
+    *   .recover { case err: TauriError => println(s"Error: ${err.getMessage}") }
     *   }}}
     */
-  inline def invoke[T](cmd: String, args: InvokeArgs)(using ec: ExecutionContext): Future[Either[TauriError, T]] =
+  inline def invoke[T](cmd: String, args: InvokeArgs)(using ec: ExecutionContext): Future[T] =
     invoke[T](cmd, args, InvokeOptions.empty)
 
   /** Invoke a Tauri command with arguments and options.
+    *
+    * Errors are propagated through the Future's failure channel and wrapped in TauriError.
     *
     * @param cmd The command name
     * @param args The command arguments
     * @param options Invoke options (e.g., custom headers)
     * @param ec Execution context for async operations
     * @tparam T The expected return type
-    * @return Future containing Either a TauriError or the result
+    * @return Future that succeeds with T or fails with TauriError
     *
     * @example
     *   {{{
@@ -142,28 +151,28 @@ object core:
     * // Invoke with custom headers
     * val options = InvokeOptions(Map("Authorization" -> "Bearer token"))
     * invoke[User]("get_user", js.Dictionary("id" -> 42), options)
+    *   .map(user => println(s"User: ${user.name}"))
     *   }}}
     */
   def invoke[T](
     cmd: String,
     args: InvokeArgs,
     options: InvokeOptions
-  )(using ec: ExecutionContext): Future[Either[TauriError, T]] =
+  )(using ec: ExecutionContext): Future[T] =
     val jsPromise = TauriInternalsGlobal.invoke[T](
       cmd,
       args.asInstanceOf[js.Any], // scalafix:ok
       options.toJS
     )
 
-    jsPromise.toFuture.transformWith:
-      case Success(result) => Future.successful(Right(result))
-      case Failure(error)  =>
-        val tauriError = TauriError.InvokeError.apply(
+    jsPromise.toFuture.recoverWith:
+      case error: Throwable =>
+        val tauriError = TauriError.InvokeError(
           cmd,
           s"Command invocation failed: ${error.getMessage}",
           Some(error)
         )
-        Future.successful(Left(tauriError))
+        Future.failed(tauriError)
   end invoke
 
   /** Convert a device file path to a URL that can be loaded by the webview.
@@ -216,12 +225,14 @@ object core:
     * Plugin events allow plugins to notify the frontend of various occurrences. The callback will
     * be invoked each time the event is emitted.
     *
+    * Errors are propagated through the Future's failure channel.
+    *
     * @param plugin The plugin name
     * @param event The event name
     * @param callback Function to call when event is emitted
     * @param ec Execution context for async operations
     * @tparam T The event payload type
-    * @return Future containing Either a TauriError or a PluginListener
+    * @return Future that succeeds with PluginListener or fails with TauriError
     *
     * @example
     *   {{{
@@ -229,11 +240,11 @@ object core:
     *
     * addPluginListener[String]("my-plugin", "status-changed") { status =>
     *   println(s"Status changed to: $status")
-    * }.foreach {
-    *   case Right(listener) =>
-    *     // Save listener to unregister later
-    *     someCleanupCode.register(listener.unregister())
-    *   case Left(error) =>
+    * }.map { listener =>
+    *   // Save listener to unregister later
+    *   someCleanupCode.register(listener.unregister())
+    * }.recover {
+    *   case error: TauriError =>
     *     println(s"Failed to register listener: ${error.message}")
     * }
     *   }}}
@@ -242,7 +253,7 @@ object core:
     plugin: String,
     event: String,
     callback: T => Unit
-  )(using ec: ExecutionContext): Future[Either[TauriError, PluginListener]] =
+  )(using ec: ExecutionContext): Future[PluginListener] =
     val handler = Channel[T](callback)
     val args = js.Dictionary[Any]("event" -> event, "handler" -> handler.toJSAny)
 
@@ -256,7 +267,7 @@ object core:
       .toFuture
       .transformWith:
         case Success(_) =>
-          Future.successful(Right(PluginListener(plugin, event, handler.id)))
+          Future.successful(PluginListener(plugin, event, handler.id))
         case Failure(_) =>
           // Fall back to camelCase for backwards compatibility
           TauriInternalsGlobal
@@ -266,16 +277,15 @@ object core:
               InvokeOptionsJS.empty
             )
             .toFuture
-            .transformWith:
-              case Success(_) =>
-                Future.successful(Right(PluginListener(plugin, event, handler.id)))
-              case Failure(error) =>
-                val tauriError = TauriError.PluginError.apply(
+            .recoverWith:
+              case error: Throwable =>
+                val tauriError = TauriError.PluginError(
                   plugin,
                   s"Failed to register listener for event '$event': ${error.getMessage}",
                   Some(error)
                 )
-                Future.successful(Left(tauriError))
+                Future.failed(tauriError)
+            .map(_ => PluginListener(plugin, event, handler.id))
   end addPluginListener
 
   /** Check permissions for a plugin.
@@ -286,19 +296,18 @@ object core:
     * @param plugin The plugin name
     * @param ec Execution context for async operations
     * @tparam T The permission response type (plugin-specific)
-    * @return Future containing Either a TauriError or the permission state
+    * @return Future that succeeds with permission state or fails with TauriError
     */
   def checkPermissions[T](
     plugin: String
-  )(using ec: ExecutionContext): Future[Either[TauriError, T]] =
-    invoke[T](s"plugin:$plugin|check_permissions").transformWith:
-      case Success(result) => Future.successful(result)
-      case Failure(error)  =>
-        val tauriError = TauriError.PermissionError.apply(
+  )(using ec: ExecutionContext): Future[T] =
+    invoke[T](s"plugin:$plugin|check_permissions").recoverWith:
+      case error: Throwable =>
+        val tauriError = TauriError.PermissionError(
           s"Failed to check permissions for plugin '$plugin': ${error.getMessage}",
           Some(error)
         )
-        Future.successful(Left(tauriError))
+        Future.failed(tauriError)
 
   /** Request permissions for a plugin.
     *
@@ -308,19 +317,18 @@ object core:
     * @param plugin The plugin name
     * @param ec Execution context for async operations
     * @tparam T The permission response type (plugin-specific)
-    * @return Future containing Either a TauriError or the permission state
+    * @return Future that succeeds with permission state or fails with TauriError
     */
   def requestPermissions[T](
     plugin: String
-  )(using ec: ExecutionContext): Future[Either[TauriError, T]] =
-    invoke[T](s"plugin:$plugin|request_permissions").transformWith:
-      case Success(result) => Future.successful(result)
-      case Failure(error)  =>
-        val tauriError = TauriError.PermissionError.apply(
+  )(using ec: ExecutionContext): Future[T] =
+    invoke[T](s"plugin:$plugin|request_permissions").recoverWith:
+      case error: Throwable =>
+        val tauriError = TauriError.PermissionError(
           s"Failed to request permissions for plugin '$plugin': ${error.getMessage}",
           Some(error)
         )
-        Future.successful(Left(tauriError))
+        Future.failed(tauriError)
 
   /** Close a Tauri resource.
     *
@@ -329,14 +337,14 @@ object core:
     *
     * @param rid The resource identifier
     * @param ec Execution context for async operations
-    * @return Future containing Either a TauriError or Unit
+    * @return Future that succeeds with Unit or fails with TauriError
     *
     * @example
     *   {{{
     * import tausi.api.core.*
     *
     * // Close a resource directly
-    * closeResource(resourceId)
+    * closeResource(resourceId).map(_ => println("Resource closed"))
     *
     * // Or use the extension method on Resource
     * resource.close()
@@ -344,19 +352,18 @@ object core:
     */
   def closeResource(
     rid: ResourceId
-  )(using ec: ExecutionContext): Future[Either[TauriError, Unit]] =
+  )(using ec: ExecutionContext): Future[Unit] =
     invoke[Unit](
       "plugin:resources|close",
       js.Dictionary("rid" -> rid.toInt)
-    ).transformWith:
-      case Success(result) => Future.successful(result)
-      case Failure(error)  =>
-        val tauriError = TauriError.ResourceError.apply(
+    ).recoverWith:
+      case error: Throwable =>
+        val tauriError = TauriError.ResourceError(
           rid,
           s"Failed to close resource: ${error.getMessage}",
           Some(error)
         )
-        Future.successful(Left(tauriError))
+        Future.failed(tauriError)
 
   extension [T](promise: js.Promise[T])
     private[tausi] inline def toFuture: Future[T] =

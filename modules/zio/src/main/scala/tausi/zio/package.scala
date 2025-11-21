@@ -38,6 +38,8 @@ import tausi.api.InvokeArgs
 import tausi.api.InvokeOptions
 import tausi.api.PluginListener
 import tausi.api.Resource
+import tausi.api.codec.Decoder
+import tausi.api.codec.Encoder
 import tausi.api.ResourceId
 import tausi.api.TauriError
 import tausi.api.TauriEvent
@@ -67,14 +69,18 @@ package object zio:
 
   /** Invoke a Tauri command with no arguments.
     *
+    * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
+    *
     * @param cmd The command name
     * @tparam T The expected return type
     * @return IO with TauriError in the error channel
     */
   def invoke[T](cmd: String)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.invoke[T](cmd)(using ec)).absolve.mapError(TauriError.fromThrowable)
+    ZIO.fromFuture(ec => Core.invoke[T](cmd)(using ec)).mapError(TauriError.fromThrowable)
 
   /** Invoke a Tauri command with arguments.
+    *
+    * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
     *
     * @param cmd The command name
     * @param args The command arguments
@@ -82,9 +88,11 @@ package object zio:
     * @return IO with TauriError in the error channel
     */
   def invoke[T](cmd: String, args: InvokeArgs)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.invoke[T](cmd, args)(using ec)).absolve.mapError(TauriError.fromThrowable)
+    ZIO.fromFuture(ec => Core.invoke[T](cmd, args)(using ec)).mapError(TauriError.fromThrowable)
 
   /** Invoke a Tauri command with arguments and options.
+    *
+    * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
     *
     * @param cmd The command name
     * @param args The command arguments
@@ -93,7 +101,7 @@ package object zio:
     * @return IO with TauriError in the error channel
     */
   def invoke[T](cmd: String, args: InvokeArgs, options: InvokeOptions)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.invoke[T](cmd, args, options)(using ec)).absolve.mapError(TauriError.fromThrowable)
+    ZIO.fromFuture(ec => Core.invoke[T](cmd, args, options)(using ec)).mapError(TauriError.fromThrowable)
 
   // ====================
   // File Conversion
@@ -134,7 +142,7 @@ package object zio:
     event: String,
     callback: T => Unit
   )(using Trace): IO[TauriError, PluginListener] =
-    ZIO.fromFuture(ec => Core.addPluginListener[T](plugin, event, callback)(using ec)).absolve.mapError(TauriError.fromThrowable)
+    ZIO.fromFuture(ec => Core.addPluginListener[T](plugin, event, callback)(using ec)).mapError(TauriError.fromThrowable)
 
   // ====================
   // Permissions
@@ -147,7 +155,7 @@ package object zio:
     * @return IO with TauriError in the error channel
     */
   def checkPermissions[T](plugin: String)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.checkPermissions[T](plugin)(using ec)).absolve.mapError(TauriError.fromThrowable)
+    ZIO.fromFuture(ec => Core.checkPermissions[T](plugin)(using ec)).mapError(TauriError.fromThrowable)
 
   /** Request permissions for a plugin.
     *
@@ -156,7 +164,7 @@ package object zio:
     * @return IO with TauriError in the error channel
     */
   def requestPermissions[T](plugin: String)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.requestPermissions[T](plugin)(using ec)).absolve.mapError(TauriError.fromThrowable)
+    ZIO.fromFuture(ec => Core.requestPermissions[T](plugin)(using ec)).mapError(TauriError.fromThrowable)
 
   /** Close a Tauri resource.
     *
@@ -164,7 +172,7 @@ package object zio:
     * @return IO with TauriError in the error channel
     */
   def closeResource(rid: ResourceId)(using Trace): IO[TauriError, Unit] =
-    ZIO.fromFuture(ec => Core.closeResource(rid)(using ec)).absolve.mapError(TauriError.fromThrowable)
+    ZIO.fromFuture(ec => Core.closeResource(rid)(using ec)).mapError(TauriError.fromThrowable)
 
   // ====================
   // Event System
@@ -173,28 +181,28 @@ package object zio:
   type Event[T] = EventMessage[T]
 
   object events:
-    def listen[T](name: String, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
+    def listen[T: Decoder](name: String, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
       listen(name, handler, EventOptions.default)
 
-    def listen[T](name: String, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
+    def listen[T: Decoder](name: String, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
       liftEventIO(CoreEvent.listen[T](name, handler, options))
 
-    def listen[T](name: TauriEvent, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
+    def listen[T: Decoder](name: TauriEvent, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
       listen(name.value, handler)
 
-    def listen[T](name: TauriEvent, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
+    def listen[T: Decoder](name: TauriEvent, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
       listen(name.value, handler, options)
 
-    def once[T](name: String, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
+    def once[T: Decoder](name: String, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
       once(name, handler, EventOptions.default)
 
-    def once[T](name: String, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
+    def once[T: Decoder](name: String, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
       liftEventIO(CoreEvent.once[T](name, handler, options))
 
-    def once[T](name: TauriEvent, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
+    def once[T: Decoder](name: TauriEvent, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
       once(name.value, handler)
 
-    def once[T](name: TauriEvent, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
+    def once[T: Decoder](name: TauriEvent, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
       once(name.value, handler, options)
 
     def emit(name: String)(using Trace): IO[TauriError, Unit] =
@@ -203,10 +211,10 @@ package object zio:
     def emit(name: TauriEvent)(using Trace): IO[TauriError, Unit] =
       emit(name.value)
 
-    def emit[T](name: String, payload: T)(using Trace): IO[TauriError, Unit] =
+    def emit[T: Encoder](name: String, payload: T)(using Trace): IO[TauriError, Unit] =
       liftEventIO(CoreEvent.emit[T](name, payload))
 
-    def emit[T](name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
+    def emit[T: Encoder](name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
       emit(name.value, payload)
 
     def emitTo(target: EventTarget, name: String)(using Trace): IO[TauriError, Unit] =
@@ -221,16 +229,16 @@ package object zio:
     def emitTo(label: String, name: TauriEvent)(using Trace): IO[TauriError, Unit] =
       emitTo(label, name.value)
 
-    def emitTo[T](target: EventTarget, name: String, payload: T)(using Trace): IO[TauriError, Unit] =
+    def emitTo[T: Encoder](target: EventTarget, name: String, payload: T)(using Trace): IO[TauriError, Unit] =
       liftEventIO(CoreEvent.emitTo[T](target, name, payload))
 
-    def emitTo[T](target: EventTarget, name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
+    def emitTo[T: Encoder](target: EventTarget, name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
       emitTo(target, name.value, payload)
 
-    def emitTo[T](label: String, name: String, payload: T)(using Trace): IO[TauriError, Unit] =
+    def emitTo[T: Encoder](label: String, name: String, payload: T)(using Trace): IO[TauriError, Unit] =
       liftEventIO(CoreEvent.emitTo[T](label, name, payload))
 
-    def emitTo[T](label: String, name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
+    def emitTo[T: Encoder](label: String, name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
       emitTo(label, name.value, payload)
 
     def unlisten(handle: EventHandle)(using Trace): IO[TauriError, Unit] =
@@ -239,24 +247,24 @@ package object zio:
     /** Listen to events with effect-based handler. Returns a scoped resource that automatically
       * unlistens when the scope closes.
       */
-    def listenScoped[T](name: String)(
+    def listenScoped[T: Decoder](name: String)(
       handler: Event[T] => IO[TauriError, Unit]
     )(using Trace): ZIO[Scope, TauriError, EventHandle] =
       listenScoped(name, EventOptions.default)(handler)
 
-    def listenScoped[T](name: String, options: EventOptions)(
+    def listenScoped[T: Decoder](name: String, options: EventOptions)(
       handler: Event[T] => IO[TauriError, Unit]
     )(using Trace): ZIO[Scope, TauriError, EventHandle] =
       ZIO.acquireRelease(
         listenWithCallback(name, options)(unsafeCallbackFrom(handler))
       )(handle => unlisten(handle).ignore)
 
-    def listenScoped[T](name: TauriEvent)(
+    def listenScoped[T: Decoder](name: TauriEvent)(
       handler: Event[T] => IO[TauriError, Unit]
     )(using Trace): ZIO[Scope, TauriError, EventHandle] =
       listenScoped(name.value, EventOptions.default)(handler)
 
-    def listenScoped[T](name: TauriEvent, options: EventOptions)(
+    def listenScoped[T: Decoder](name: TauriEvent, options: EventOptions)(
       handler: Event[T] => IO[TauriError, Unit]
     )(using Trace): ZIO[Scope, TauriError, EventHandle] =
       listenScoped(name.value, options)(handler)
@@ -264,10 +272,10 @@ package object zio:
     /** Create a ZStream of events. The stream will emit events as they arrive and automatically
       * unlisten when the stream is closed.
       */
-    def stream[T](name: String)(using Trace): ZStream[Any, TauriError, Event[T]] =
+    def stream[T: Decoder](name: String)(using Trace): ZStream[Any, TauriError, Event[T]] =
       stream(name, EventOptions.default)
 
-    def stream[T](name: String, options: EventOptions)(using Trace): ZStream[Any, TauriError, Event[T]] =
+    def stream[T: Decoder](name: String, options: EventOptions)(using Trace): ZStream[Any, TauriError, Event[T]] =
       ZStream.scoped {
         for
           queue <- ZIO.acquireRelease(Queue.unbounded[Event[T]])(_.shutdown)
@@ -275,13 +283,13 @@ package object zio:
         yield ZStream.fromQueue(queue)
       }.flatten
 
-    def stream[T](name: TauriEvent)(using Trace): ZStream[Any, TauriError, Event[T]] =
+    def stream[T: Decoder](name: TauriEvent)(using Trace): ZStream[Any, TauriError, Event[T]] =
       stream(name.value)
 
-    def stream[T](name: TauriEvent, options: EventOptions)(using Trace): ZStream[Any, TauriError, Event[T]] =
+    def stream[T: Decoder](name: TauriEvent, options: EventOptions)(using Trace): ZStream[Any, TauriError, Event[T]] =
       stream(name.value, options)
 
-    private def listenWithCallback[T](
+    private def listenWithCallback[T: Decoder](
       name: String,
       options: EventOptions
     )(callback: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
@@ -294,8 +302,8 @@ package object zio:
         }
   end events
 
-  private def liftEventIO[A](op: ExecutionContext ?=> scala.concurrent.Future[Either[TauriError, A]])(using Trace): IO[TauriError, A] =
-    ZIO.fromFuture(ec => op(using ec)).absolve.mapError(TauriError.fromThrowable)
+  private def liftEventIO[A](op: ExecutionContext ?=> scala.concurrent.Future[A])(using Trace): IO[TauriError, A] =
+    ZIO.fromFuture(ec => op(using ec)).mapError(TauriError.fromThrowable)
 
   // ====================
   // Extensions for Resource Lifecycle
@@ -307,7 +315,7 @@ package object zio:
       * @return IO with TauriError in the error channel
       */
     def unregisterZIO(using Trace): IO[TauriError, Unit] =
-      ZIO.fromFuture(ec => listener.unregister()(using ec)).absolve.mapError(TauriError.fromThrowable)
+      ZIO.fromFuture(ec => listener.unregister()(using ec)).mapError(TauriError.fromThrowable)
 
   extension (resource: Resource)
     /** Close this resource with ZIO encapsulation.
@@ -315,5 +323,5 @@ package object zio:
       * @return IO with TauriError in the error channel
       */
     def closeZIO(using Trace): IO[TauriError, Unit] =
-      ZIO.fromFuture(ec => resource.close()(using ec)).absolve.mapError(TauriError.fromThrowable)
+      ZIO.fromFuture(ec => resource.close()(using ec)).mapError(TauriError.fromThrowable)
 end zio

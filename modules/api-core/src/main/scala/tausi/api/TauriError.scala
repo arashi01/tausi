@@ -24,7 +24,11 @@ import scala.scalajs.js
 import scala.util.control.NoStackTrace
 
 /** The root error type for all Tauri-related errors. */
-sealed trait TauriError extends Throwable with NoStackTrace with Product with Serializable
+sealed abstract class TauriError(message: String, cause: Option[Throwable])
+    extends Throwable(message, cause.getOrElse(null.asInstanceOf[Throwable]))
+    with NoStackTrace
+    with Product
+    with Serializable // scalafix:ok
 
 object TauriError:
   /** Error occurred during command invocation.
@@ -36,8 +40,8 @@ object TauriError:
   final case class InvokeError(
     command: String,
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Error occurred during plugin operations.
     *
@@ -48,8 +52,8 @@ object TauriError:
   final case class PluginError(
     plugin: String,
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Error occurred during permission operations.
     *
@@ -58,8 +62,8 @@ object TauriError:
     */
   final case class PermissionError(
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Error occurred during resource management.
     *
@@ -70,8 +74,8 @@ object TauriError:
   final case class ResourceError(
     resourceId: ResourceId,
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Error occurred during file path conversion.
     *
@@ -84,8 +88,8 @@ object TauriError:
     filePath: String,
     protocol: String,
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Error occurred during callback operations.
     *
@@ -96,8 +100,8 @@ object TauriError:
   final case class CallbackError(
     callbackId: CallbackId,
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Error occurred during channel operations.
     *
@@ -108,8 +112,8 @@ object TauriError:
   final case class ChannelError(
     channelId: CallbackId,
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Generic error for cases not covered by specific error types.
     *
@@ -118,8 +122,8 @@ object TauriError:
     */
   final case class GenericError(
     message: String,
-    cause: Option[Throwable]
-  ) extends TauriError
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
 
   /** Error indicating Tauri runtime is not available.
     *
@@ -127,7 +131,7 @@ object TauriError:
     *
     * @param message Description of what went wrong
     */
-  final case class TauriNotAvailableError(message: String) extends TauriError
+  final case class TauriNotAvailableError(message: String) extends TauriError(message, None)
 
   object InvokeError:
     /** Create InvokeError without cause */

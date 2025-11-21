@@ -25,13 +25,14 @@ inThisBuild(
 val libraries = new {
   val `cats-effect` = Def.setting("org.typelevel" %%% "cats-effect" % "3.7.0-RC1")
   val fs2 = Def.setting("co.fs2" %%% "fs2-core" % "3.13.0-M7")
+  val scalatags = Def.setting("com.lihaoyi" %%% "scalatags" % "0.13.1")
   val zio = Def.setting("dev.zio" %%% "zio" % "2.1.22")
   val `zio-streams` = Def.setting("dev.zio" %%% "zio-streams" % "2.1.22")
   // Testing
   val munit = Def.setting("org.scalameta" %%% "munit" % "1.2.1" % Test)
   val `munit-cats-effect` = Def.setting("org.typelevel" %%% "munit-cats-effect" % "2.2.0-RC1" % Test)
   val `munit-zio` = Def.setting("com.github.poslegm" %%% "munit-zio" % "0.4.0" % Test)
-  val `scala-java-time` = Def.setting("io.github.cquiroz" %%% "scala-java-time" % "2.6.0" % Test)
+  val `scala-java-time` = Def.setting("io.github.cquiroz" %%% "scala-java-time" % "2.6.0")
 }
 
 val `tausi-api-core` =
@@ -71,6 +72,21 @@ val `tausi-zio` =
     .settings(libraryDependencies += libraries.zio.value)
     .settings(libraryDependencies += libraries.`zio-streams`.value)
     .settings(libraryDependencies += libraries.`munit-zio`.value)
+
+val `tausi-sample` =
+  project
+    .in(file("modules/sample"))
+    .enablePlugins(ScalaJSPlugin)
+    .dependsOn(`tausi-cats`)
+    .dependsOn(`tausi-zio`)
+    .settings(libraryDependencies += libraries.scalatags.value)
+    .settings(libraryDependencies += libraries.`scala-java-time`.value)
+    .settings(scalaJSUseMainModuleInitializer := true)
+    .settings(scalaJSLinkerConfig ~= { c =>
+      import org.scalajs.linker.interface.*
+      c.withModuleKind(ModuleKind.ESModule)
+        .withModuleSplitStyle(ModuleSplitStyle.SmallModulesFor(List("tausi.sample")))
+    })
 
 lazy val `tausi-root` =
   project
@@ -117,7 +133,10 @@ def baseCompilerOptions = List(
 
 def compilerOptions = baseCompilerOptions ++ List(
   "-Yexplicit-nulls",
+  "-Xcheck-macros",
   "-Xfatal-warnings"
+  // Suppress warning for intentional inline class instantiation in codec derivation
+//  "-Wconf:msg=New anonymous class definition will be duplicated at each inline site:s"
 )
 
 def compilerSettings = List(
@@ -135,7 +154,7 @@ def formattingSettings = List(
 def unitTestSettings: List[Setting[?]] = List(
   libraryDependencies ++= List(
     libraries.munit.value,
-    libraries.`scala-java-time`.value
+    libraries.`scala-java-time`.value % Test
   ),
   testFrameworks += new TestFramework("munit.Framework")
 )

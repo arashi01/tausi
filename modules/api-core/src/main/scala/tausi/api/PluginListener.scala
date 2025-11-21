@@ -54,7 +54,7 @@ object PluginListener:
       * @param ec Execution context for async operations
       * @return Future containing Either a TauriError or Unit
       */
-    def unregister()(using ec: ExecutionContext): Future[Either[TauriError, Unit]] =
+    def unregister()(using ec: ExecutionContext): Future[Unit] =
       // Import core in method to avoid circular dependency
       tausi.api.core.invoke[Unit](
         s"plugin:${listener.plugin}|remove_listener",
