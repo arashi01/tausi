@@ -1,0 +1,9 @@
+{
+  "name": "tausi",
+  "version": "0.1.0",
+  "description": "Scala Tauri Development Kit",
+  "private": true,
+  "devDependencies": {
+    "jsdom": "^27.2.0"
+  }
+}
