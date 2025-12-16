@@ -226,16 +226,9 @@ object event:
     )
 
     val jsPromise = TIG.invoke[Int]("plugin:event|listen", args, InvokeOptionsJS.empty)
-    val p = scala.concurrent.Promise[EventHandle]()
-    jsPromise.`then`[Unit](
-      (eventIdentifier: Int) => p.success(EventHandle(name, EventId.unsafe(eventIdentifier), callbackId)): Unit,
-      (error: Any) =>
-        val throwable = error match
-          case t: Throwable => t
-          case _            => js.JavaScriptException(error)
-        p.failure(throwable): Unit
-    ): Unit
-    p.future
+    jsPromise.toFuture.map { eventIdentifier =>
+      EventHandle(name, EventId.unsafe(eventIdentifier), callbackId)
+    }
   end registerListener
 
   private def unlistenInternal(
