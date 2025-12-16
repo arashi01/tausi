@@ -18,6 +18,18 @@ inThisBuild(
         "scm:git:https://github.com/arashi01/tausi.git",
         Some("scm:git:git@github.com:arashi01/tausi.git")
       )
+    ),
+    // Tauri source version for code generation (git SHA or tag)
+    SourceGenerators.tauriVersion := "956031d",
+    // Commands to exclude from generation (implement manually for complex types)
+    // Only exclude commands with truly unmappable Rust types (callbacks, complex event handlers, raw byte arrays)
+    SourceGenerators.tauriCommandExclusions := Set(
+      // Event commands with callback function types (EventName, EventTarget, CallbackFn)
+      "plugin:event|listen",
+      "plugin:event|once",
+      // Image commands with raw byte arrays (js.Array[Int])
+      "plugin:image|new",
+      "plugin:image|from_bytes"
     )
   ) ++ formattingSettings
 )
@@ -35,16 +47,17 @@ val libraries = new {
   val `scala-java-time` = Def.setting("io.github.cquiroz" %%% "scala-java-time" % "2.6.0")
 }
 
-val `tausi-api-core` =
-  project
-    .in(file("modules/api-core"))
-    .enablePlugins(ScalaJSPlugin)
+val `tausi-api` =
+  crossProject(JSPlatform, NativePlatform)
+    .crossType(CrossType.Full)
+    .in(file("modules/api"))
     .settings(compilerSettings)
     .settings(unitTestSettings)
     .settings(fileHeaderSettings)
     .settings(publishSettings)
-    .settings(
-      Test / jsEnv := new org.scalajs.jsenv.jsdomnodejs.JSDOMNodeJSEnv()
+    .jsSettings(
+      Test / jsEnv := new org.scalajs.jsenv.jsdomnodejs.JSDOMNodeJSEnv(),
+      Compile / sourceGenerators += SourceGenerators.tauriCommandsGeneratorTask.taskValue
     )
 
 val `tausi-cats` =
@@ -55,7 +68,7 @@ val `tausi-cats` =
     .settings(unitTestSettings)
     .settings(fileHeaderSettings)
     .settings(publishSettings)
-    .dependsOn(`tausi-api-core`)
+    .dependsOn(`tausi-api`.js)
     .settings(libraryDependencies += libraries.`cats-effect`.value)
     .settings(libraryDependencies += libraries.fs2.value)
     .settings(libraryDependencies += libraries.`munit-cats-effect`.value)
@@ -68,7 +81,7 @@ val `tausi-zio` =
     .settings(unitTestSettings)
     .settings(fileHeaderSettings)
     .settings(publishSettings)
-    .dependsOn(`tausi-api-core`)
+    .dependsOn(`tausi-api`.js)
     .settings(libraryDependencies += libraries.zio.value)
     .settings(libraryDependencies += libraries.`zio-streams`.value)
     .settings(libraryDependencies += libraries.`munit-zio`.value)
@@ -88,14 +101,31 @@ val `tausi-sample` =
         .withModuleSplitStyle(ModuleSplitStyle.SmallModulesFor(List("tausi.sample")))
     })
 
+val `tausi-native` =
+  project
+    .in(file(".scala-native"))
+    .settings(publish / skip := true) // TODO: Future module
+    .aggregate(
+      `tausi-api`.native
+    )
+
+val `tausi-js` =
+  project
+    .in(file(".scala-js"))
+    .settings(publish / skip := true)
+    .aggregate(
+      `tausi-api`.js,
+      `tausi-cats`,
+      `tausi-zio`
+    )
+
 lazy val `tausi-root` =
   project
     .in(file("."))
     .settings(publish / skip := true)
     .aggregate(
-      `tausi-api-core`,
-      `tausi-cats`,
-      `tausi-zio`
+      `tausi-js`,
+      `tausi-native`
     )
 
 def baseCompilerOptions = List(

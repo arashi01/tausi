@@ -26,8 +26,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ 25, 17 ]
+        java: [ 22, 25 ]
         os: [ ubuntu-latest ]
+        platform: [ js ]
 
     steps:
       - name: Checkout
@@ -78,13 +79,17 @@ jobs:
       - name: Install Node.js dependencies
         run: npm ci
 
-      - name: sbt Build & Test (${{ matrix.platform }})
+      - name: Compile & Test (${{ matrix.platform }})
         shell: bash
         env:
           # Helps Scala Native reliably find LLVM tools on Windows
           CC: ${{ startsWith(matrix.os, 'windows') && 'clang' || '' }}
           AR: ${{ startsWith(matrix.os, 'windows') && 'llvm-ar' || '' }}
-        run: sbt -Dsbt.ci=true test
+        run: sbt -Dsbt.ci=true "tausi-${{ matrix.platform }}/test
+
+      - name: Package Deployment Artefacts (${{ matrix.platform }})
+        shell: bash
+        run: sbt -Dsbt.ci=true "tausi-${{ matrix.platform }}/package
 
   static-analysis:
     name: Static Analysis

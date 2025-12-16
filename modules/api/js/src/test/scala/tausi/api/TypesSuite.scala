@@ -40,7 +40,7 @@ class TauriErrorSuite extends FunSuite:
     assertEquals(error.message, "initialization failed")
 
   test("ResourceError should contain resource ID"):
-    val rid = ResourceId.fromInt(42).getOrElse(fail("Failed to create ResourceId"))
+    val rid = ResourceId.unsafe(42)
     val error = TauriError.ResourceError.apply(rid, "cleanup failed", None)
     assertEquals(error.resourceId, rid)
     assertEquals(error.message, "cleanup failed")
@@ -69,48 +69,19 @@ end TauriErrorSuite
 class TypesSuite extends FunSuite:
 
   test("CallbackId should wrap integer"):
-    val id = CallbackId.fromInt(42).getOrElse(fail("Failed to create CallbackId"))
+    val id = CallbackId.unsafe(42)
     assertEquals(id.toInt, 42)
 
   test("CallbackId show should format correctly"):
-    val id = CallbackId.fromInt(123).getOrElse(fail("Failed to create CallbackId"))
+    val id = CallbackId.unsafe(123)
     assertEquals(id.show, "CallbackId(123)")
 
   test("ResourceId should wrap integer"):
-    val id = ResourceId.fromInt(99).getOrElse(fail("Failed to create ResourceId"))
+    val id = ResourceId.unsafe(99)
     assertEquals(id.toInt, 99)
 
   test("ResourceId show should format correctly"):
-    val id = ResourceId.fromInt(456).getOrElse(fail("Failed to create ResourceId"))
+    val id = ResourceId.unsafe(456)
     assertEquals(id.show, "ResourceId(456)")
 
-  test("PermissionState.fromString should parse valid states"):
-    assertEquals(PermissionState.fromString("granted"), Right(PermissionState.Granted))
-    assertEquals(PermissionState.fromString("denied"), Right(PermissionState.Denied))
-    assertEquals(PermissionState.fromString("prompt"), Right(PermissionState.Prompt))
-    assertEquals(PermissionState.fromString("prompt-with-rationale"), Right(PermissionState.PromptWithRationale))
-
-  test("PermissionState.fromString should return Left for invalid states"):
-    assert(PermissionState.fromString("invalid").isLeft)
-    assert(PermissionState.fromString("").isLeft)
-
-  test("PermissionState.asString should convert to string"):
-    assertEquals(PermissionState.Granted.asString, "granted")
-    assertEquals(PermissionState.Denied.asString, "denied")
-    assertEquals(PermissionState.Prompt.asString, "prompt")
-    assertEquals(PermissionState.PromptWithRationale.asString, "prompt-with-rationale")
-
-  test("PermissionState.isGranted should check state"):
-    assert(PermissionState.Granted.isGranted)
-    assert(!PermissionState.Denied.isGranted)
-
-  test("PermissionState.isDenied should check state"):
-    assert(PermissionState.Denied.isDenied)
-    assert(!PermissionState.Granted.isDenied)
-
-  test("PermissionState.needsPrompt should check state"):
-    assert(PermissionState.Prompt.needsPrompt)
-    assert(PermissionState.PromptWithRationale.needsPrompt)
-    assert(!PermissionState.Granted.needsPrompt)
-    assert(!PermissionState.Denied.needsPrompt)
 end TypesSuite

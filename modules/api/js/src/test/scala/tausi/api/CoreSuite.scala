@@ -30,21 +30,6 @@ class CoreApiSuite extends FunSuite:
     val result = core.isTauri
     assertEquals(result, false)
 
-  test("InvokeOptions should support empty options"):
-    val opts = InvokeOptions.empty
-    assert(opts.headers.isEmpty)
-
-  test("InvokeOptions should support headers"):
-    val opts = InvokeOptions(Map("Authorization" -> "Bearer token"))
-    assertEquals(opts.headers.size, 1)
-    assertEquals(opts.headers.get("Authorization"), Some("Bearer token"))
-
-  test("InvokeOptions.toJS should convert to JS format"):
-    val opts = InvokeOptions(Map("X-Custom" -> "value"))
-    val jsOpts = opts.toJS
-    // Just ensure it doesn't throw
-    assert(jsOpts != null)
-
   // TODO: Enable with WebDriver testing
   // test("Channel should have unique IDs"):
   //   val ch1 = Channel[String]()

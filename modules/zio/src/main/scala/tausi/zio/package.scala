@@ -30,19 +30,19 @@ import _root_.zio.UIO
 import _root_.zio.ZIO
 import _root_.zio.stream.ZStream
 
+import tausi.api.Closeable
+import tausi.api.Command
+import tausi.api.Command0
 import tausi.api.EventHandle
 import tausi.api.EventMessage
 import tausi.api.EventOptions
 import tausi.api.EventTarget
-import tausi.api.InvokeArgs
-import tausi.api.InvokeOptions
-import tausi.api.PluginListener
 import tausi.api.Resource
-import tausi.api.codec.Decoder
-import tausi.api.codec.Encoder
 import tausi.api.ResourceId
 import tausi.api.TauriError
 import tausi.api.TauriEvent
+import tausi.api.codec.Decoder
+import tausi.api.codec.Encoder
 import tausi.api.core as Core
 import tausi.api.event as CoreEvent
 
@@ -67,41 +67,45 @@ package object zio:
   // Command Invocation
   // ====================
 
-  /** Invoke a Tauri command with no arguments.
+  /** Invoke a zero-argument Tauri command.
     *
     * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
     *
-    * @param cmd The command name
-    * @tparam T The expected return type
+    * @param cmd The Command0 instance (resolved implicitly)
+    * @tparam Res The expected return type
     * @return IO with TauriError in the error channel
+    *
+    * @example
+    *   {{{
+    * import tausi.zio.*
+    * import tausi.api.commands.app.{given, *}
+    *
+    * val version: IO[TauriError, String] = invoke  // Command0[String] resolved implicitly
+    *   }}}
     */
-  def invoke[T](cmd: String)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.invoke[T](cmd)(using ec)).mapError(TauriError.fromThrowable)
+  def invoke[Res](using cmd: Command0[Res])(using Trace): IO[TauriError, Res] =
+    ZIO.fromFuture(ec => Core.invoke[Res](using cmd, ec)).mapError(TauriError.fromThrowable)
 
-  /** Invoke a Tauri command with arguments.
+  /** Invoke a Tauri command with parameters.
     *
     * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
     *
-    * @param cmd The command name
-    * @param args The command arguments
-    * @tparam T The expected return type
+    * @param req The request parameters
+    * @param cmd The Command instance (resolved implicitly)
+    * @tparam Req The request parameter type
+    * @tparam Res The expected return type
     * @return IO with TauriError in the error channel
-    */
-  def invoke[T](cmd: String, args: InvokeArgs)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.invoke[T](cmd, args)(using ec)).mapError(TauriError.fromThrowable)
-
-  /** Invoke a Tauri command with arguments and options.
     *
-    * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
+    * @example
+    *   {{{
+    * import tausi.zio.*
+    * import tausi.api.commands.window.{given, *}
     *
-    * @param cmd The command name
-    * @param args The command arguments
-    * @param options Invoke options (e.g., custom headers)
-    * @tparam T The expected return type
-    * @return IO with TauriError in the error channel
+    * invoke(SetTitle("main", "My App"))
+    *   }}}
     */
-  def invoke[T](cmd: String, args: InvokeArgs, options: InvokeOptions)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.invoke[T](cmd, args, options)(using ec)).mapError(TauriError.fromThrowable)
+  def invoke[Req, Res](req: Req)(using cmd: Command[Req, Res])(using Trace): IO[TauriError, Res] =
+    ZIO.fromFuture(ec => Core.invoke[Req, Res](req)(using cmd, ec)).mapError(TauriError.fromThrowable)
 
   // ====================
   // File Conversion
@@ -124,25 +128,6 @@ package object zio:
     */
   def convertFileSrc(filePath: String, protocol: String): UIO[Either[TauriError, String]] =
     ZIO.succeed(Core.convertFileSrc(filePath, protocol))
-
-  // ====================
-  // Plugin Listeners
-  // ====================
-
-  /** Add a listener to a plugin event.
-    *
-    * @param plugin The plugin name
-    * @param event The event name
-    * @param callback Function to call when event is emitted
-    * @tparam T The event payload type
-    * @return IO with TauriError in the error channel
-    */
-  def addPluginListener[T](
-    plugin: String,
-    event: String,
-    callback: T => Unit
-  )(using Trace): IO[TauriError, PluginListener] =
-    ZIO.fromFuture(ec => Core.addPluginListener[T](plugin, event, callback)(using ec)).mapError(TauriError.fromThrowable)
 
   // ====================
   // Permissions
@@ -309,14 +294,6 @@ package object zio:
   // Extensions for Resource Lifecycle
   // ====================
 
-  extension (listener: PluginListener)
-    /** Unregister this listener with ZIO encapsulation.
-      *
-      * @return IO with TauriError in the error channel
-      */
-    def unregisterZIO(using Trace): IO[TauriError, Unit] =
-      ZIO.fromFuture(ec => listener.unregister()(using ec)).mapError(TauriError.fromThrowable)
-
   extension (resource: Resource)
     /** Close this resource with ZIO encapsulation.
       *
@@ -324,4 +301,90 @@ package object zio:
       */
     def closeZIO(using Trace): IO[TauriError, Unit] =
       ZIO.fromFuture(ec => resource.close()(using ec)).mapError(TauriError.fromThrowable)
+
+  // ====================
+  // Resource Lifecycle Management
+  // ====================
+
+  /** Extension methods for Closeable resources to integrate with ZIO Scope.
+    *
+    * Provides automatic resource management with ZIO's acquire-release pattern.
+    *
+    * Example:
+    * {{{
+    * import tausi.zio.*
+    * import tausi.api.Closeable
+    *
+    * def useResource[R: Closeable](r: R): ZIO[Scope, TauriError, Unit] =
+    *   r.toScoped.flatMap { resource =>
+    *     // Use the resource safely
+    *     // Cleanup happens automatically even on errors
+    *     ZIO.debug("Using resource")
+    *   }
+    * }}}
+    */
+  extension [R](resource: R)(using closeable: Closeable[R])
+    /** Convert a Closeable resource to a scoped ZIO effect.
+      *
+      * The resulting effect will automatically close the resource when the scope ends, even if an
+      * error occurs during usage. This provides safe, composable resource management.
+      *
+      * @return ZIO effect with Scope requirement that manages the lifecycle
+      *
+      * @example
+      *   {{{
+      * import tausi.zio.*
+      * import tausi.api.commands.image.{given, *}
+      *
+      * val program = ZIO.scoped {
+      *   for {
+      *     img <- invoke(FromPath("/path/to/image.png"))
+      *     _ <- img.toScoped
+      *     _ <- ZIO.debug(s"Image size: ${img.width}x${img.height}")
+      *     // Image automatically closed when scope ends
+      *   } yield ()
+      * }
+      *   }}}
+      *
+      * Complexity: O(1) + cleanup cost
+      */
+    def toScoped(using trace: Trace): ZIO[Scope, TauriError, R] =
+      ZIO.acquireRelease(
+        acquire = ZIO.succeed(resource)(using trace)
+      )(release =
+        r =>
+          ZIO
+            .fromFuture(ec => closeable.close(r)(using ec))(using trace)
+            .mapError(TauriError.fromThrowable)
+            .orDie // Convert to defect since release failures should not be recoverable
+      )(using trace)
+
+    /** Lift a Closeable resource into a scoped ZIO effect with acquisition.
+      *
+      * Similar to toScoped but allows specifying an acquisition action that may fail.
+      *
+      * @param acquire The ZIO action to acquire the resource
+      * @return ZIO effect with Scope requirement that manages the lifecycle
+      *
+      * @example
+      *   {{{
+      * import tausi.zio.*
+      *
+      * def loadImage(path: String): ZIO[Scope, TauriError, MyImage] =
+      *   MyImage.empty.asScoped {
+      *     for {
+      *       img <- invoke(FromPath(path))
+      *     } yield img
+      *   }
+      *   }}}
+      */
+    def asScoped(acquire: ZIO[Any, TauriError, R])(using trace: Trace): ZIO[Scope, TauriError, R] =
+      ZIO.acquireRelease(acquire)(release =
+        r =>
+          ZIO
+            .fromFuture(ec => closeable.close(r)(using ec))(using trace)
+            .mapError(TauriError.fromThrowable)
+            .orDie
+      )(using trace)
+  end extension
 end zio

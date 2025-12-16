@@ -18,29 +18,10 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-package tausi.cats
+package tausi.api.commands
 
-import scala.scalajs.js
+import tausi.api.Plugin
 
-import munit.CatsEffectSuite
-
-import tausi.api.internal.InvokeOptionsJS
-
-class TauriCatsSuite extends CatsEffectSuite:
-
-  // TODO: Enable with WebDriver testing
-  // test("Tauri.isTauri should return IO"):
-  //   Tauri.isTauri.map { result =>
-  //     assert(result == false) // In test environment
-  //   }
-
-  test("InvokeOptionsJS should be constructible"):
-    val opts = InvokeOptionsJS.empty
-    // internal JS representation should have no headers
-    assert(opts.headers.isEmpty)
-
-  test("InvokeOptionsJS with headers"):
-    val opts = InvokeOptionsJS(js.Dictionary("X-Test" -> "value"))
-    val headers = opts.headers.getOrElse(js.Dictionary.empty).asInstanceOf[js.Dictionary[String]] // scalafix:ok
-    assertEquals(headers("X-Test"), "value")
-end TauriCatsSuite
+/** Tray plugin commands. */
+object tray extends TrayCommandsGenerated:
+  given plugin: Plugin[tray.type] = Plugin.noop("tray")

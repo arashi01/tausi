@@ -26,8 +26,9 @@ import scala.scalajs.js
 
 import tausi.api.codec.Decoder
 import tausi.api.codec.Encoder
-import tausi.api.internal.EventPluginInternalsBridge
-import tausi.api.internal.TauriInternalsGlobal
+import tausi.api.commands.event.Emit
+import tausi.api.commands.event.EmitTo
+import tausi.api.core.invoke
 
 /** Event-system entry point mirroring `@tauri-apps/api/event`. */
 object event:
@@ -92,64 +93,59 @@ object event:
   def emit(
     name: String
   )(using ExecutionContext): Future[Unit] =
-    core.invoke[Unit]("plugin:event|emit", js.Dictionary[Any]("event" -> name))
+    val eventName = EventName.unsafe(name) // TauriEvent constants are always valid
+    invoke(Emit(eventName, None))
 
   /** Emit a predefined [[TauriEvent]] without payload. */
   def emit(
     event: TauriEvent
   )(using ExecutionContext): Future[Unit] =
-    emit(event.value)
+    invoke(Emit(EventName(event), None))
 
   /** Emit an event with a payload. */
   def emit[T](
     name: String,
     payload: T
   )(using ExecutionContext, Encoder[T]): Future[Unit] =
-    core.invoke[Unit](
-      "plugin:event|emit",
-      js.Dictionary[Any]("event" -> name, "payload" -> summon[Encoder[T]].encode(payload))
-    )
+    val eventName = EventName.unsafe(name)
+    invoke(Emit(eventName, Some(summon[Encoder[T]].encode(payload))))
 
   /** Emit a predefined [[TauriEvent]] with payload. */
   def emit[T](
     event: TauriEvent,
     payload: T
   )(using ExecutionContext, Encoder[T]): Future[Unit] =
-    emit(event.value, payload)
+    invoke(Emit(EventName(event), Some(summon[Encoder[T]].encode(payload))))
 
   /** Emit to a specific label target. */
   def emitTo(
     label: String,
     name: String
   )(using ExecutionContext): Future[Unit] =
-    emitTo(EventTarget.AnyLabel(label), name)
+    val eventName = EventName.unsafe(name)
+    invoke(EmitTo(EventTarget.AnyLabel(label), eventName, None))
 
   /** Emit a predefined [[TauriEvent]] to a label. */
   def emitTo(
     label: String,
     event: TauriEvent
   )(using ExecutionContext): Future[Unit] =
-    emitTo(EventTarget.AnyLabel(label), event.value)
+    invoke(EmitTo(EventTarget.AnyLabel(label), EventName(event), None))
 
   /** Emit to an explicit target definition. */
   def emitTo(
     target: EventTarget,
     name: String
   )(using ExecutionContext): Future[Unit] =
-    core.invoke[Unit](
-      "plugin:event|emit_to",
-      js.Dictionary[Any](
-        "target" -> target.toJS,
-        "event" -> name
-      )
-    )
+    val eventName = EventName.unsafe(name)
+    invoke(EmitTo(target, eventName, None))
 
   /** Emit a predefined [[TauriEvent]] to an explicit target. */
   def emitTo(
     target: EventTarget,
     event: TauriEvent
   )(using ExecutionContext): Future[Unit] =
-    emitTo(target, event.value)
+    invoke(EmitTo(target, EventName(event), None))
 
   /** Emit with payload to a specific label. */
   def emitTo[T](
@@ -157,7 +153,8 @@ object event:
     name: String,
     payload: T
   )(using ExecutionContext, Encoder[T]): Future[Unit] =
-    emitTo(EventTarget.AnyLabel(label), name, payload)
+    val eventName = EventName.unsafe(name)
+    invoke(EmitTo(EventTarget.AnyLabel(label), eventName, Some(summon[Encoder[T]].encode(payload))))
 
   /** Emit a predefined [[TauriEvent]] with payload to a label. */
   def emitTo[T](
@@ -165,7 +162,7 @@ object event:
     event: TauriEvent,
     payload: T
   )(using ExecutionContext, Encoder[T]): Future[Unit] =
-    emitTo(EventTarget.AnyLabel(label), event.value, payload)
+    invoke(EmitTo(EventTarget.AnyLabel(label), EventName(event), Some(summon[Encoder[T]].encode(payload))))
 
   /** Emit with payload to an explicit target. */
   def emitTo[T](
@@ -173,14 +170,8 @@ object event:
     name: String,
     payload: T
   )(using ExecutionContext, Encoder[T]): Future[Unit] =
-    core.invoke[Unit](
-      "plugin:event|emit_to",
-      js.Dictionary[Any](
-        "target" -> target.toJS,
-        "event" -> name,
-        "payload" -> summon[Encoder[T]].encode(payload)
-      )
-    )
+    val eventName = EventName.unsafe(name)
+    invoke(EmitTo(target, eventName, Some(summon[Encoder[T]].encode(payload))))
 
   /** Emit a predefined [[TauriEvent]] with payload to an explicit target. */
   def emitTo[T](
@@ -188,7 +179,7 @@ object event:
     event: TauriEvent,
     payload: T
   )(using ExecutionContext, Encoder[T]): Future[Unit] =
-    emitTo(target, event.value, payload)
+    invoke(EmitTo(target, EventName(event), Some(summon[Encoder[T]].encode(payload))))
 
   /** Unlisten using a previously obtained handle. */
   def unlisten(
@@ -202,6 +193,8 @@ object event:
     options: EventOptions,
     autoUnlisten: Boolean
   )(using ec: ExecutionContext, decoder: Decoder[T]): Future[EventHandle] =
+    import tausi.api.internal.TauriInternalsGlobal
+
     // scalafix:off
     var callbackId: CallbackId = CallbackId.unsafe(-1)
     val jsHandler: js.Function1[js.Dynamic, Unit] = (raw: js.Dynamic) =>
@@ -221,16 +214,28 @@ object event:
     val rawId = TauriInternalsGlobal.transformCallback(jsHandler, false)
     callbackId = CallbackId.unsafe(rawId)
 
+    // Note: We must use raw IPC for listen because it requires callback function registration
+    // which cannot be represented in the Command typeclass system
+    import tausi.api.internal.{TauriInternalsGlobal as TIG, InvokeOptionsJS}
+    val eventName = EventName.unsafe(name) // User-provided names validated at runtime by Tauri
+
     val args = js.Dictionary[Any](
-      "event" -> name,
+      "event" -> eventName.value,
       "target" -> options.target.toJS,
       "handler" -> callbackId.toInt
     )
 
-    core
-      .invoke[Int]("plugin:event|listen", args)
-      .map: eventIdentifier =>
-        EventHandle(name, EventId.unsafe(eventIdentifier), callbackId)
+    val jsPromise = TIG.invoke[Int]("plugin:event|listen", args, InvokeOptionsJS.empty)
+    val p = scala.concurrent.Promise[EventHandle]()
+    jsPromise.`then`[Unit](
+      (eventIdentifier: Int) => p.success(EventHandle(name, EventId.unsafe(eventIdentifier), callbackId)): Unit,
+      (error: Any) =>
+        val throwable = error match
+          case t: Throwable => t
+          case _            => js.JavaScriptException(error)
+        p.failure(throwable): Unit
+    ): Unit
+    p.future
   end registerListener
 
   private def unlistenInternal(
@@ -238,15 +243,14 @@ object event:
     eventId: EventId,
     callbackId: CallbackId
   )(using ExecutionContext): Future[Unit] =
+    import tausi.api.internal.{EventPluginInternalsBridge, TauriInternalsGlobal}
+    import tausi.api.commands.event.Unlisten
+
     val handled = EventPluginInternalsBridge.unregisterListener(name, eventId.toInt)
     if !handled then TauriInternalsGlobal.unregisterCallback(callbackId.toInt)
 
-    core.invoke[Unit](
-      "plugin:event|unlisten",
-      js.Dictionary[Any](
-        "event" -> name,
-        "eventId" -> eventId.toInt
-      )
-    )
+    // Use the generated Unlisten command
+    val eventName = EventName.unsafe(name)
+    invoke(Unlisten(eventName, eventId))
   end unlistenInternal
 end event

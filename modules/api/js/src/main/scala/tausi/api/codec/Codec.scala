@@ -109,6 +109,18 @@ object Encoder:
   given Encoder[Unit] with
     def encode(value: Unit): js.Any = js.undefined
 
+  given Encoder[js.Any] with
+    def encode(value: js.Any): js.Any = value
+
+  given Encoder[js.Dynamic] with
+    def encode(value: js.Dynamic): js.Any = value.asInstanceOf[js.Any]
+
+  given Encoder[js.Array[js.Dynamic]] with
+    def encode(value: js.Array[js.Dynamic]): js.Any = value.asInstanceOf[js.Any]
+
+  given Encoder[js.typedarray.Uint8Array] with
+    def encode(value: js.typedarray.Uint8Array): js.Any = value.asInstanceOf[js.Any]
+
   // Collection encoders
   given [A](using e: Encoder[A]): Encoder[List[A]] with
     def encode(value: List[A]): js.Any =
@@ -122,6 +134,10 @@ object Encoder:
     def encode(value: Option[A]): js.Any = value match
       case Some(a) => e.encode(a)
       case None    => js.undefined
+
+  given [A](using e: Encoder[A]): Encoder[js.Array[A]] with
+    def encode(value: js.Array[A]): js.Any =
+      value.map(e.encode).asInstanceOf[js.Any]
 
   given [K, V](using e: Encoder[V]): Encoder[Map[K, V]] with
     def encode(value: Map[K, V]): js.Any =
@@ -222,6 +238,22 @@ object Decoder:
   given Decoder[Unit] with
     def decode(value: js.Any): Either[String, Unit] = Right(())
 
+  given Decoder[js.Any] with
+    def decode(value: js.Any): Either[String, js.Any] =
+      Right(value)
+
+  given Decoder[js.Dynamic] with
+    def decode(value: js.Any): Either[String, js.Dynamic] =
+      Right(value.asInstanceOf[js.Dynamic])
+
+  given Decoder[js.Array[js.Dynamic]] with
+    def decode(value: js.Any): Either[String, js.Array[js.Dynamic]] =
+      Right(value.asInstanceOf[js.Array[js.Dynamic]])
+
+  given Decoder[js.typedarray.Uint8Array] with
+    def decode(value: js.Any): Either[String, js.typedarray.Uint8Array] =
+      Right(value.asInstanceOf[js.typedarray.Uint8Array])
+
   // Collection decoders
   given [A](using d: Decoder[A]): Decoder[List[A]] with
     def decode(value: js.Any): Either[String, List[A]] =
@@ -246,6 +278,18 @@ object Decoder:
     def decode(value: js.Any): Either[String, Option[A]] =
       if value == null || js.isUndefined(value) then Right(None)
       else d.decode(value).map(Some(_))
+
+  given [A](using d: Decoder[A]): Decoder[js.Array[A]] with
+    def decode(value: js.Any): Either[String, js.Array[A]] =
+      if js.Array.isArray(value.asInstanceOf[js.Object]) then
+        val arr = value.asInstanceOf[js.Array[js.Any]]
+        val results = arr.map(d.decode)
+        val errors = results.zipWithIndex.collect { case (Left(err), idx) =>
+          s"[$idx]: $err"
+        }
+        if errors.isEmpty then Right(results.collect { case Right(v) => v }.asInstanceOf[js.Array[A]])
+        else Left(s"Array decoding errors: ${errors.mkString(", ")}")
+      else Left(s"Expected array, got ${js.typeOf(value)}")
 
   given [K, V](using d: Decoder[V]): Decoder[Map[K, V]] with
     def decode(value: js.Any): Either[String, Map[K, V]] =
@@ -350,9 +394,26 @@ object Codec:
       def encode(value: A): js.Any = enc.encode(value)
       def decode(value: js.Any): Either[String, A] = dec.decode(value)
 
-  // Derive codec from encoder and decoder
+  // Automatically derive codec from separate encoder and decoder
   given [A](using enc: Encoder[A], dec: Decoder[A]): Codec[A] = from[A]
 
   inline def derived[A](using m: Mirror.Of[A]): Codec[A] =
     from[A](using Encoder.derived[A], Decoder.derived[A])
+
+  // Special codecs for js.Dynamic types (passthrough)
+  given Codec[js.Dynamic] = from(using
+    new Encoder[js.Dynamic]:
+      def encode(value: js.Dynamic): js.Any = value.asInstanceOf[js.Any]
+    ,
+    new Decoder[js.Dynamic]:
+      def decode(value: js.Any): Either[String, js.Dynamic] = Right(value.asInstanceOf[js.Dynamic])
+  )
+
+  given Codec[js.Array[js.Dynamic]] = from(using
+    new Encoder[js.Array[js.Dynamic]]:
+      def encode(value: js.Array[js.Dynamic]): js.Any = value.asInstanceOf[js.Any]
+    ,
+    new Decoder[js.Array[js.Dynamic]]:
+      def decode(value: js.Any): Either[String, js.Array[js.Dynamic]] = Right(value.asInstanceOf[js.Array[js.Dynamic]])
+  )
 end Codec

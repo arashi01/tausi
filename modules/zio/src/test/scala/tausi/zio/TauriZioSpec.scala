@@ -20,12 +20,13 @@
  */
 package tausi.zio
 
+import scala.scalajs.js
+
 import munit.*
 
-import tausi.api.InvokeOptions
+import tausi.api.internal.InvokeOptionsJS
 
 class TauriZioSpec extends ZSuite:
-
   // TODO: Enable with WebDriver testing
   // testZ("Tauri.isTauri should return UIO") {
   //   for
@@ -33,11 +34,12 @@ class TauriZioSpec extends ZSuite:
   //   yield assertEquals(result, false) // In test environment
   // }
 
-  test("InvokeOptions should be constructible"):
-    val opts = InvokeOptions.empty
-    assertEquals(opts.headers.isEmpty, true)
+  test("InvokeOptionsJS should be constructible"):
+    val opts = InvokeOptionsJS.empty
+    assert(opts.headers.isEmpty)
 
-  test("InvokeOptions with headers"):
-    val opts = InvokeOptions(Map("X-Test" -> "value"))
-    assertEquals(opts.headers.size, 1)
+  test("InvokeOptionsJS with headers"):
+    val opts = InvokeOptionsJS(js.Dictionary("X-Test" -> "value"))
+    val headers = opts.headers.getOrElse(js.Dictionary.empty).asInstanceOf[js.Dictionary[String]] // scalafix:ok
+    assertEquals(headers("X-Test"), "value")
 end TauriZioSpec

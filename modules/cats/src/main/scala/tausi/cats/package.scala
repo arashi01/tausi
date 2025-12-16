@@ -81,68 +81,64 @@ package object cats:
   // Command Invocation
   // ====================
 
-  /** Invoke a Tauri command with no arguments.
+  /** Invoke a zero-argument Tauri command.
     *
     * Errors are propagated through IO's error channel as TauriError.
     *
-    * @param cmd The command name
-    * @tparam T The expected return type
-    * @return IO that succeeds with T or fails with TauriError
+    * @param cmd The Command0 instance (resolved implicitly)
+    * @tparam Res The expected return type
+    * @return IO that succeeds with Res or fails with TauriError
+    *
+    * @example {{{import tausi.cats.* import tausi.api.commands.app.{given, *}
+    *
+    * val version: IO[String] = invoke // Command0[String] resolved implicitly }}}
     *
     * Complexity: O(1) + IPC latency
     */
-  def invoke[T](cmd: String): IO[T] =
+  def invoke[Res](using cmd: Command0[Res]): IO[Res] =
     IO.executionContext.flatMap: ec =>
-      IO.fromFuture(IO(Core.invoke[T](cmd)(using ec)))
+      IO.fromFuture(IO(Core.invoke[Res](using cmd, ec)))
 
-  /** Invoke a Tauri command with arguments.
+  /** Invoke a Tauri command with parameters.
     *
     * Errors are propagated through IO's error channel as TauriError.
     *
-    * @param cmd The command name
-    * @param args The command arguments
-    * @tparam T The expected return type
-    * @return IO that succeeds with T or fails with TauriError
-    */
-  def invoke[T](cmd: String, args: InvokeArgs): IO[T] =
-    IO.executionContext.flatMap: ec =>
-      IO.fromFuture(IO(Core.invoke[T](cmd, args)(using ec)))
-
-  /** Invoke a Tauri command with arguments and options.
+    * @param req The request parameters
+    * @param cmd The Command instance (resolved implicitly)
+    * @tparam Req The request parameter type
+    * @tparam Res The expected return type
+    * @return IO that succeeds with Res or fails with TauriError
     *
-    * Errors are propagated through IO's error channel as TauriError.
+    * @example {{{import tausi.cats.* import tausi.api.commands.window.{given, *}
     *
-    * @param cmd The command name
-    * @param args The command arguments
-    * @param options Invoke options (e.g., custom headers)
-    * @tparam T The expected return type
-    * @return IO that succeeds with T or fails with TauriError
+    * invoke(SetTitle("main", "My App")) }}}
     */
-  def invoke[T](cmd: String, args: InvokeArgs, options: InvokeOptions): IO[T] =
+  def invoke[Req, Res](req: Req)(using cmd: Command[Req, Res]): IO[Res] =
     IO.executionContext.flatMap: ec =>
-      IO.fromFuture(IO(Core.invoke[T](cmd, args, options)(using ec)))
+      IO.fromFuture(IO(Core.invoke[Req, Res](req)(using cmd, ec)))
 
   // ====================
   // Typed Error Channel API (EitherT)
   // ====================
 
-  /** Invoke a Tauri command with typed error channel (EitherT).
+  /** Invoke a zero-argument command with typed error channel (EitherT).
     *
     * Provides ZIO-like typed error channels using EitherT[IO, TauriError, T]. Use this when you
     * want explicit TauriError in the type signature for composable error handling.
     *
-    * @param cmd The command name
-    * @tparam T The expected return type
+    * @param cmd The Command0 instance (resolved implicitly)
+    * @tparam Res The expected return type
     * @return EitherT with TauriError in the error channel
     *
     * @example
     *   {{{
     * import tausi.cats.*
+    * import tausi.api.commands.app.{given, *}
     *
     * val program: EitherT[IO, TauriError, String] = for {
-    *   greeting <- invokeEither[String]("greet", js.Dictionary("name" -> "Alice"))
-    *   result <- invokeEither[String]("process", js.Dictionary("data" -> greeting))
-    * } yield result
+    *   version <- invokeEither[String]
+    *   name <- invokeEither[String](using app.name)
+    * } yield s"$name v$version"
     *
     * program.value.flatMap {
     *   case Right(result) => IO.println(s"Success: $result")
@@ -150,22 +146,15 @@ package object cats:
     * }
     *   }}}
     */
-  def invokeEither[T](cmd: String): EitherT[IO, TauriError, T] =
-    EitherT(invoke[T](cmd).attempt.map(_.left.map {
+  def invokeEither[Res](using cmd: Command0[Res]): EitherT[IO, TauriError, Res] =
+    EitherT(invoke[Res].attempt.map(_.left.map {
       case err: TauriError => err
       case err             => TauriError.fromThrowable(err)
     }))
 
-  /** Invoke a Tauri command with arguments and typed error channel (EitherT). */
-  def invokeEither[T](cmd: String, args: InvokeArgs): EitherT[IO, TauriError, T] =
-    EitherT(invoke[T](cmd, args).attempt.map(_.left.map {
-      case err: TauriError => err
-      case err             => TauriError.fromThrowable(err)
-    }))
-
-  /** Invoke a Tauri command with arguments, options, and typed error channel (EitherT). */
-  def invokeEither[T](cmd: String, args: InvokeArgs, options: InvokeOptions): EitherT[IO, TauriError, T] =
-    EitherT(invoke[T](cmd, args, options).attempt.map(_.left.map {
+  /** Invoke a command with parameters and typed error channel (EitherT). */
+  def invokeEither[Req, Res](req: Req)(using cmd: Command[Req, Res]): EitherT[IO, TauriError, Res] =
+    EitherT(invoke[Req, Res](req).attempt.map(_.left.map {
       case err: TauriError => err
       case err             => TauriError.fromThrowable(err)
     }))
@@ -197,26 +186,6 @@ package object cats:
     */
   def convertFileSrc(filePath: String, protocol: String): IO[Either[TauriError, String]] =
     IO.delay(Core.convertFileSrc(filePath, protocol))
-
-  // ====================
-  // Plugin Listeners
-  // ====================
-
-  /** Add a listener to a plugin event.
-    *
-    * @param plugin The plugin name
-    * @param event The event name
-    * @param callback Function to call when event is emitted
-    * @tparam T The event payload type
-    * @return IO containing Either a TauriError or a PluginListener
-    */
-  def addPluginListener[T](
-    plugin: String,
-    event: String,
-    callback: T => Unit
-  ): IO[PluginListener] =
-    IO.executionContext.flatMap: ec =>
-      IO.fromFuture(IO(Core.addPluginListener[T](plugin, event, callback)(using ec)))
 
   // ====================
   // Permissions
@@ -373,15 +342,6 @@ package object cats:
     IO.executionContext.flatMap: ec =>
       IO.fromFuture(IO(op(using ec)))
 
-  extension (listener: PluginListener)
-    /** Unregister this listener with IO encapsulation.
-      *
-      * @return IO containing Either a TauriError or Unit
-      */
-    def unregisterIO: IO[Unit] =
-      IO.executionContext.flatMap: ec =>
-        IO.fromFuture(IO(listener.unregister()(using ec)))
-
   extension (resource: tausi.api.Resource)
     /** Close this resource with IO encapsulation.
       *
@@ -390,4 +350,68 @@ package object cats:
     def closeIO: IO[Unit] =
       IO.executionContext.flatMap: ec =>
         IO.fromFuture(IO(resource.close()(using ec)))
+
+  // ====================
+  // Resource Lifecycle Management
+  // ====================
+
+  /** Extension methods for Closeable resources to integrate with cats-effect Resource.
+    *
+    * Provides automatic resource management with bracket pattern and composable cleanup.
+    *
+    * Example:
+    * {{{
+    * import tausi.cats.*
+    * import tausi.api.Closeable
+    *
+    * def useResource[R: Closeable](r: R): IO[Unit] =
+    *   r.toResource.use { resource =>
+    *     // Use the resource safely
+    *     // Cleanup happens automatically even on errors
+    *     IO.println("Using resource")
+    *   }
+    * }}}
+    */
+  extension [R](resource: R)(using closeable: Closeable[R])
+    /** Convert a Closeable resource to a cats-effect Resource.
+      *
+      * The resulting Resource will automatically close the resource when it's released, even if an
+      * error occurs during usage. This provides safe, composable resource management.
+      *
+      * @return cats-effect Resource that manages the lifecycle
+      *
+      * @example
+      *   {{{
+      * import tausi.cats.*
+      * import tausi.api.commands.image.{given, *}
+      *
+      * val program = for {
+      *   img <- invoke(FromPath("/path/to/image.png"))
+      *   _ <- img.toResource.use { image =>
+      *     // Use the image safely
+      *     IO.println(s"Image size: ${image.width}x${image.height}")
+      *   }
+      *   // Image automatically closed here
+      * } yield ()
+      *   }}}
+      *
+      * Complexity: O(1) + cleanup cost
+      */
+    def toResource: Resource[IO, R] =
+      Resource.make(IO.pure(resource)): r =>
+        IO.executionContext.flatMap: ec =>
+          IO.fromFuture(IO(closeable.close(r)(using ec)))
+
+    /** Lift a Closeable resource into a cats-effect Resource with acquisition.
+      *
+      * Similar to toResource but allows specifying an acquisition action.
+      *
+      * @param acquire The IO action to acquire the resource
+      * @return cats-effect Resource that manages the lifecycle
+      */
+    def asResource(acquire: IO[R]): Resource[IO, R] =
+      Resource.make(acquire): r =>
+        IO.executionContext.flatMap: ec =>
+          IO.fromFuture(IO(closeable.close(r)(using ec)))
+  end extension
 end cats

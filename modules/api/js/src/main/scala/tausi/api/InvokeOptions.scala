@@ -18,29 +18,5 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-package tausi.cats
-
-import scala.scalajs.js
-
-import munit.CatsEffectSuite
-
-import tausi.api.internal.InvokeOptionsJS
-
-class TauriCatsSuite extends CatsEffectSuite:
-
-  // TODO: Enable with WebDriver testing
-  // test("Tauri.isTauri should return IO"):
-  //   Tauri.isTauri.map { result =>
-  //     assert(result == false) // In test environment
-  //   }
-
-  test("InvokeOptionsJS should be constructible"):
-    val opts = InvokeOptionsJS.empty
-    // internal JS representation should have no headers
-    assert(opts.headers.isEmpty)
-
-  test("InvokeOptionsJS with headers"):
-    val opts = InvokeOptionsJS(js.Dictionary("X-Test" -> "value"))
-    val headers = opts.headers.getOrElse(js.Dictionary.empty).asInstanceOf[js.Dictionary[String]] // scalafix:ok
-    assertEquals(headers("X-Test"), "value")
-end TauriCatsSuite
+// InvokeOptions removed - dead code
+// Headers feature not implemented in Tauri, always uses empty options

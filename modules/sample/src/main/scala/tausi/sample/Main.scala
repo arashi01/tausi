@@ -65,6 +65,42 @@ object Main:
   // Cats-Effect Examples
   // ====================
 
+  // Define manual commands for the sample since we don't have generated ones for "greet" and "start_counter"
+  // In a real app, these would be generated or defined in a proper module
+  object SampleCommands:
+    final case class Greet(name: String)
+    object Greet:
+      given Codec[Greet] = Codec.derived
+      given CanEqual[Greet, Greet] = CanEqual.derived
+
+    given greet: Command[Greet, String] = new Command[Greet, String]:
+      val id = CommandId.unsafe("greet")
+      given encoder: Encoder[Greet] = summon[Codec[Greet]]
+      given decoder: Decoder[String] = summon[Codec[String]]
+
+    final case class StartCounter(max: Int)
+    object StartCounter:
+      given Codec[StartCounter] = Codec.derived
+      given CanEqual[StartCounter, StartCounter] = CanEqual.derived
+
+    given startCounter: Command[StartCounter, String] = new Command[StartCounter, String]:
+      val id = CommandId.unsafe("start_counter")
+      given encoder: Encoder[StartCounter] = summon[Codec[StartCounter]]
+      given decoder: Decoder[String] = summon[Codec[String]]
+
+    final case class EchoPayload(message: String) derives Codec
+    final case class Echo(payload: EchoPayload)
+    object Echo:
+      given Codec[Echo] = Codec.derived
+      given CanEqual[Echo, Echo] = CanEqual.derived
+
+    given echo: Command[Echo, String] = new Command[Echo, String]:
+      val id = CommandId.unsafe("echo")
+      given encoder: Encoder[Echo] = summon[Codec[Echo]]
+      given decoder: Decoder[String] = summon[Codec[String]]
+
+  import SampleCommands.{given, *}
+
   def setupCatsEffectExample(): Unit =
     val button = document.getElementById("cats-greet-btn").asInstanceOf[dom.html.Button]
     val input = document.getElementById("cats-name-input").asInstanceOf[dom.html.Input]
@@ -76,7 +112,7 @@ object Main:
         if name.nonEmpty then
           val program = for
             _ <- IO(console.log(s"🐱 Cats-Effect: Calling greet command with name: $name"))
-            greeting <- CatsAPI.invoke[String]("greet", js.Dictionary("name" -> name))
+            greeting <- CatsAPI.invoke(Greet(name))
             _ <- IO(output.textContent = s"✅ $greeting")
             _ <- IO(console.log(s"🐱 Cats-Effect: Success - $greeting"))
           yield ()
@@ -116,7 +152,7 @@ object Main:
           })
           
           // Start the counter
-          msg <- CatsAPI.invoke[String]("start_counter", js.Dictionary("max" -> 10))
+          msg <- CatsAPI.invoke(StartCounter(10))
           _ <- IO(console.log(s"🐱 Counter command: $msg"))
         yield ()
         
@@ -144,7 +180,7 @@ object Main:
         if message.nonEmpty then
           val program = for
             _ <- zio.ZIO.succeed(console.log(s"⚡ ZIO: Calling echo command with: $message"))
-            result <- ZioAPI.invoke[String]("echo", js.Dictionary("payload" -> js.Dictionary("message" -> message)))
+            result <- ZioAPI.invoke(Echo(EchoPayload(message)))
             _ <- zio.ZIO.succeed {
               val resultStr = if result == null then "null" else result
               console.log(s"⚡ ZIO: Result: '$resultStr'")
@@ -156,8 +192,8 @@ object Main:
           Unsafe.unsafe { implicit unsafe =>
             runtime.unsafe.run(program.catchAll { err =>
               zio.ZIO.succeed {
-                output.textContent = s"❌ Error: ${err.getMessage}"
-                console.error(s"⚡ ZIO: Error - ${err.getMessage}", err)
+                output.textContent = s"❌ Error: ${err.message}"
+                console.error(s"⚡ ZIO: Error - ${err.message}")
               }
             })
           }
@@ -190,7 +226,7 @@ object Main:
           })
           
           // Start the counter  
-          result <- ZioAPI.invoke[String]("start_counter", js.Dictionary("max" -> 10))
+          result <- ZioAPI.invoke(StartCounter(10))
           _ <- zio.ZIO.succeed(console.log(s"⚡ Counter command: $result"))
         yield ()
         
@@ -198,8 +234,8 @@ object Main:
         Unsafe.unsafe { implicit unsafe =>
           runtime.unsafe.run(program.catchAll { err =>
             zio.ZIO.succeed {
-              output.textContent = s"❌ Error: ${err.getMessage}"
-              console.error(s"⚡ Error: ${err.getMessage}")
+              output.textContent = s"❌ Error: ${err.message}"
+              console.error(s"⚡ Error: ${err.message}")
             }
           })
         }
