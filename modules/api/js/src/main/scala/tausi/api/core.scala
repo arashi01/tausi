@@ -338,18 +338,4 @@ object core:
         )
         Future.failed(tauriError)
   end closeResource
-
-  extension [T](promise: js.Promise[T])
-    private[tausi] inline def toFuture: Future[T] =
-      val p = scala.concurrent.Promise[T]()
-      promise.`then`[Unit](
-        (value: T) => p.success(value): Unit,
-        (error: Any) =>
-          val throwable = inline error match
-            case t: Throwable => t
-            case _            => js.JavaScriptException(error)
-          p.failure(throwable): Unit
-      ): Unit
-      p.future
-  end extension
 end core
