@@ -37,7 +37,8 @@ inThisBuild(
 val libraries = new {
   val `cats-effect` = Def.setting("org.typelevel" %%% "cats-effect" % "3.7.0-RC1")
   val fs2 = Def.setting("co.fs2" %%% "fs2-core" % "3.13.0-M7")
-  val scalatags = Def.setting("com.lihaoyi" %%% "scalatags" % "0.13.1")
+  val laminar = Def.setting("com.raquo" %%% "laminar" % "17.2.1")
+  val waypoint = Def.setting("com.raquo" %%% "waypoint" % "9.0.0")
   val zio = Def.setting("dev.zio" %%% "zio" % "2.1.22")
   val `zio-streams` = Def.setting("dev.zio" %%% "zio-streams" % "2.1.22")
   // Testing
@@ -90,15 +91,16 @@ val `tausi-sample` =
   project
     .in(file("modules/sample"))
     .enablePlugins(ScalaJSPlugin)
-    .dependsOn(`tausi-cats`)
     .dependsOn(`tausi-zio`)
-    .settings(libraryDependencies += libraries.scalatags.value)
+    .settings(libraryDependencies += libraries.laminar.value)
+    .settings(libraryDependencies += libraries.waypoint.value)
     .settings(libraryDependencies += libraries.`scala-java-time`.value)
     .settings(scalaJSUseMainModuleInitializer := true)
     .settings(scalaJSLinkerConfig ~= { c =>
       import org.scalajs.linker.interface.*
       c.withModuleKind(ModuleKind.ESModule)
         .withModuleSplitStyle(ModuleSplitStyle.SmallModulesFor(List("tausi.sample")))
+        .withSourceMap(false)
     })
 
 val `tausi-native` =

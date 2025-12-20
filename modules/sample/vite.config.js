@@ -1,6 +1,6 @@
 import {defineConfig} from "vite";
 import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
-
+import tailwindcss from "@tailwindcss/vite"
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -9,12 +9,13 @@ export default defineConfig({
         scalaJSPlugin({
             // path to the directory containing the sbt build
             // default: '.'
-            cwd: '../../',
+            cwd: "../../",
 
             // sbt project ID from within the sbt build to get fast/fullLinkJS from
             // default: the root project of the sbt build
-            projectID: 'tausi-sample',
-        })
+            projectID: "tausi-sample",
+        }),
+        tailwindcss(),
     ],
     clearScreen: false,
     server: {

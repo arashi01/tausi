@@ -1,115 +1,79 @@
-.logo.vanilla:hover {
-  filter: drop-shadow(0 0 2em #ffe21c);
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 theme configuration
+ */
+@theme {
+  /* Corporate dark palette - accessible contrast ratios */
+  --color-surface-900: #0a0a0f;
+  --color-surface-800: #12121a;
+  --color-surface-700: #1a1a24;
+  --color-surface-600: #24242f;
+  --color-surface-500: #2e2e3a;
+  
+  /* Primary accent - cyan/teal corporate */
+  --color-primary: #06b6d4;
+  --color-primary-hover: #22d3ee;
+  --color-primary-muted: #0891b2;
+  
+  /* Secondary accent */
+  --color-accent: #8b5cf6;
+  --color-accent-hover: #a78bfa;
+  
+  /* Text colors - WCAG AA compliant on dark backgrounds */
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  
+  /* Semantic colors */
+  --color-success: #10b981;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+  
+  /* Border colors */
+  --color-border: #334155;
+  --color-border-focus: #06b6d4;
 }
 
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+/* Base layer - minimal essential styles */
+@layer base {
+  html {
+    /* Prevent layout shift on scrollbar */
+    scrollbar-gutter: stable;
   }
-
-  a:hover {
-    color: #24c8db;
+  
+  body {
+    @apply bg-surface-900 text-text-primary antialiased;
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+  
+  /* Accessible focus styles - visible on all elements */
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary;
   }
+  
+  /* Remove default focus outline, rely on focus-visible */
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
+}
 
-  button:active {
-    background-color: #0f0f0f69;
+/* Scrollbar styling for dark theme */
+@layer utilities {
+  .scrollbar-dark::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-dark::-webkit-scrollbar-track {
+    @apply bg-surface-800;
+  }
+  
+  .scrollbar-dark::-webkit-scrollbar-thumb {
+    @apply bg-surface-500 rounded;
+  }
+  
+  .scrollbar-dark::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-600;
   }
 }

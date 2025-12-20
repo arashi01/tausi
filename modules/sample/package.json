@@ -14,7 +14,9 @@
   },
   "devDependencies": {
     "@scala-js/vite-plugin-scalajs": "^1.1",
+    "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/cli": "^2",
+    "tailwindcss": "^4.1.18",
     "vite": "^7.2.2"
   }
 }
