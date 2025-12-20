@@ -22,6 +22,7 @@ package tausi.api
 
 import scala.scalajs.js
 
+import tausi.api.codec.Codec
 import tausi.api.codec.Decoder
 import tausi.api.codec.Encoder
 
@@ -64,7 +65,7 @@ object CommandId:
 
   extension (id: CommandId)
     /** Convert CommandId back to String for IPC. */
-    def value: String = id
+    inline def value: String = id
 
     /** Show CommandId for debugging. */
     inline def show: String = s"CommandId($id)"
@@ -76,25 +77,22 @@ end CommandId
   *   - Req: The request parameter type (must have an Encoder)
   *   - Res: The response type (must have a Decoder)
   *
-  * Commands are typically defined as given instances in plugin-specific objects.
+  * Commands are typically defined as given instances using the `Command.define` factory.
   *
   * @tparam Req The request parameter type
   * @tparam Res The response type
   *
   * @example
   *   {{{
-  * // Define a command with parameters
-  * final case class SetTitle(label: String, title: String)
+  * import tausi.api.Command
+  * import tausi.api.codec.Codec
   *
-  * object SetTitle:
-  *   given Codec[SetTitle] = Codec.derived
-  *   given CanEqual[SetTitle, SetTitle] = CanEqual.derived
+  * // Define a command with parameters using Codec derivation
+  * final case class SetTitle(label: String, title: String) derives Codec, CanEqual
   *
+  * // Create the command instance using the factory method
   * given setTitle: Command[SetTitle, Unit] =
-  *   new Command[SetTitle, Unit]:
-  *     val id = CommandId.unsafe("plugin:window|set_title")
-  *     given Encoder[SetTitle] = summon[Codec[SetTitle]]
-  *     given Decoder[Unit] = summon[Codec[Unit]]
+  *   Command.define[SetTitle, Unit]("plugin:window|set_title")
   *
   * // Use the command
   * invoke(SetTitle("main", "My App"))
@@ -119,14 +117,14 @@ trait Command[Req, Res]:
   *
   * @example
   *   {{{
-  * // Define a zero-argument command
-  * given version: Command0[String] =
-  *   new Command0[String]:
-  *     val id = CommandId.unsafe("plugin:app|version")
-  *     given Decoder[String] = summon[Codec[String]]
+  * import tausi.api.Command
+  * import tausi.api.codec.Codec
   *
-  * // Use the command with implicit resolution
-  * val versionFuture: Future[String] = invoke  // Command0[String] resolved from context
+  * // Define a zero-argument command using the factory method
+  * given version: Command0[String] = Command.define0[String]("plugin:app|version")
+  *
+  * // Use the command with implicit resolution (no arguments needed)
+  * val versionFuture: Future[String] = invoke
   *   }}}
   */
 trait Command0[Res]:
@@ -143,17 +141,262 @@ object Command:
   /** Summon a Command0 instance from implicit scope. */
   inline def apply[Res](using cmd: Command0[Res]): Command0[Res] = cmd
 
+  // ============================================================
+  // Implementation Classes
+  // ============================================================
+
+  /** Concrete implementation of Command for factory methods.
+    *
+    * Uses @publicInBinary to allow inline factory methods to instantiate
+    * while keeping the class private to the Command companion object.
+    */
+  final class Impl[Req, Res] @scala.annotation.publicInBinary private[Command] (
+    val id: CommandId,
+    enc: Encoder[Req],
+    dec: Decoder[Res]
+  ) extends Command[Req, Res]:
+    given encoder: Encoder[Req] = enc
+    given decoder: Decoder[Res] = dec
+
+  /** Concrete implementation of Command0 for factory methods. */
+  final class Impl0[Res] @scala.annotation.publicInBinary private[Command] (
+    val id: CommandId,
+    dec: Decoder[Res]
+  ) extends Command0[Res]:
+    given decoder: Decoder[Res] = dec
+
+  // ============================================================
+  // Factory Methods for User-Defined Commands
+  // ============================================================
+
+  /** Create a command with automatic codec resolution.
+    *
+    * This factory method simplifies defining custom commands by automatically
+    * resolving Encoder and Decoder instances from the provided Codecs.
+    *
+    * @param commandId The command identifier string (e.g., "save_survey" or "plugin:myplugin|my_command")
+    * @tparam Req The request parameter type (must have a Codec instance)
+    * @tparam Res The response type (must have a Codec instance)
+    * @return A Command instance ready for use with invoke
+    *
+    * @example
+    *   {{{
+    * final case class SaveSurveyRequest(submission: SurveySubmission) derives Codec
+    *
+    * // Simple one-liner command definition
+    * given saveSurvey: Command[SaveSurveyRequest, Unit] =
+    *   Command.define[SaveSurveyRequest, Unit]("save_survey")
+    *
+    * // Use with invoke
+    * invoke(SaveSurveyRequest(submission))
+    *   }}}
+    */
+  inline def define[Req, Res](inline commandId: String)(using
+    reqCodec: Codec[Req],
+    resCodec: Codec[Res]
+  ): Command[Req, Res] =
+    Impl[Req, Res](CommandId.unsafe(commandId), reqCodec, resCodec)
+
+  /** Create a command with explicit encoder and decoder.
+    *
+    * Use this variant when you have separate Encoder and Decoder instances
+    * instead of unified Codec instances.
+    *
+    * @param commandId The command identifier string
+    * @param enc Encoder for the request type
+    * @param dec Decoder for the response type
+    * @tparam Req The request parameter type
+    * @tparam Res The response type
+    * @return A Command instance ready for use with invoke
+    *
+    * @example
+    *   {{{
+    * given myCommand: Command[MyRequest, MyResponse] =
+    *   Command.defineWith[MyRequest, MyResponse]("my_command")(
+    *     myRequestEncoder,
+    *     myResponseDecoder
+    *   )
+    *   }}}
+    */
+  inline def defineWith[Req, Res](inline commandId: String)(
+    enc: Encoder[Req],
+    dec: Decoder[Res]
+  ): Command[Req, Res] =
+    Impl[Req, Res](CommandId.unsafe(commandId), enc, dec)
+
+  /** Create a zero-argument command with automatic codec resolution.
+    *
+    * Use this for commands that take no parameters.
+    *
+    * @param commandId The command identifier string
+    * @tparam Res The response type (must have a Codec instance)
+    * @return A Command0 instance ready for use with invoke
+    *
+    * @example
+    *   {{{
+    * // Zero-argument command returning a String
+    * given getVersion: Command0[String] =
+    *   Command.define0[String]("get_version")
+    *
+    * // Use with invoke (no parameters)
+    * val version: Future[String] = invoke
+    *   }}}
+    */
+  inline def define0[Res](inline commandId: String)(using
+    resCodec: Codec[Res]
+  ): Command0[Res] =
+    Impl0[Res](CommandId.unsafe(commandId), resCodec)
+
+  /** Create a zero-argument command with explicit decoder.
+    *
+    * @param commandId The command identifier string
+    * @param dec Decoder for the response type
+    * @tparam Res The response type
+    * @return A Command0 instance ready for use with invoke
+    */
+  inline def define0With[Res](inline commandId: String)(
+    dec: Decoder[Res]
+  ): Command0[Res] =
+    Impl0[Res](CommandId.unsafe(commandId), dec)
+
+  // ============================================================
+  // Command Transformations
+  // ============================================================
+
+  /** Transform the response type of a Command.
+    *
+    * @param cmd The original command
+    * @param f Function to transform the response after decoding
+    * @tparam Req The request type (unchanged)
+    * @tparam Res The original response type
+    * @tparam Res2 The new response type
+    * @return A new Command with transformed response decoder
+    *
+    * @example
+    *   {{{
+    * // Transform a String response to Int
+    * given intVersion: Command[VersionReq, Int] =
+    *   Command.mapResponse(stringVersionCmd)(_.toInt)
+    *   }}}
+    */
+  def mapResponse[Req, Res, Res2](cmd: Command[Req, Res])(f: Res => Res2): Command[Req, Res2] =
+    Impl[Req, Res2](
+      cmd.id,
+      cmd.encoder,
+      cmd.decoder.map(f)
+    )
+
+  /** Transform the request type of a Command.
+    *
+    * @param cmd The original command
+    * @param f Function to transform the request before encoding
+    * @tparam Req The original request type
+    * @tparam Req2 The new request type
+    * @tparam Res The response type (unchanged)
+    * @return A new Command with transformed request encoder
+    *
+    * @example
+    *   {{{
+    * // Accept a simpler type that gets transformed to the full request
+    * given simpleSetTitle: Command[String, Unit] =
+    *   Command.contramapRequest(setTitleCmd)(title => SetTitle("main", title))
+    *   }}}
+    */
+  def contramapRequest[Req, Req2, Res](cmd: Command[Req, Res])(f: Req2 => Req): Command[Req2, Res] =
+    Impl[Req2, Res](
+      cmd.id,
+      cmd.encoder.contramap(f),
+      cmd.decoder
+    )
+
+  /** Transform both request and response types of a Command.
+    *
+    * @param cmd The original command
+    * @param f Function to transform the request before encoding
+    * @param g Function to transform the response after decoding
+    * @return A new Command with both transformations applied
+    */
+  def bimap[Req, Req2, Res, Res2](cmd: Command[Req, Res])(
+    f: Req2 => Req,
+    g: Res => Res2
+  ): Command[Req2, Res2] =
+    Impl[Req2, Res2](
+      cmd.id,
+      cmd.encoder.contramap(f),
+      cmd.decoder.map(g)
+    )
+
+  /** Transform the response type of a Command0.
+    *
+    * @param cmd The original zero-argument command
+    * @param f Function to transform the response after decoding
+    * @return A new Command0 with transformed response decoder
+    */
+  def mapResponse0[Res, Res2](cmd: Command0[Res])(f: Res => Res2): Command0[Res2] =
+    Impl0[Res2](cmd.id, cmd.decoder.map(f))
+
+  /** Create a copy of a command with a different command ID.
+    *
+    * Useful for testing, mocking, or creating variants of existing commands.
+    *
+    * @param cmd The original command
+    * @param newId The new command identifier
+    * @return A new Command with the specified ID
+    */
+  inline def withId[Req, Res](cmd: Command[Req, Res])(inline newId: String): Command[Req, Res] =
+    Impl[Req, Res](CommandId.unsafe(newId), cmd.encoder, cmd.decoder)
+
+  /** Create a copy of a zero-argument command with a different command ID.
+    *
+    * @param cmd The original command
+    * @param newId The new command identifier
+    * @return A new Command0 with the specified ID
+    */
+  inline def withId0[Res](cmd: Command0[Res])(inline newId: String): Command0[Res] =
+    Impl0[Res](CommandId.unsafe(newId), cmd.decoder)
+
+  // ============================================================
+  // Extension Methods
+  // ============================================================
+
+  extension [Req, Res](cmd: Command[Req, Res])
+    /** Transform the response type using the given function. */
+    def mapRes[Res2](f: Res => Res2): Command[Req, Res2] =
+      mapResponse(cmd)(f)
+
+    /** Transform the request type using the given function. */
+    def contramapReq[Req2](f: Req2 => Req): Command[Req2, Res] =
+      contramapRequest(cmd)(f)
+
+    /** Create a copy with a different command ID. */
+    inline def withCommandId(inline newId: String): Command[Req, Res] =
+      withId(cmd)(newId)
+  end extension
+
+  extension [Res](cmd: Command0[Res])
+    /** Transform the response type using the given function. */
+    def mapRes[Res2](f: Res => Res2): Command0[Res2] =
+      mapResponse0(cmd)(f)
+
+    /** Create a copy with a different command ID. */
+    inline def withCommandId(inline newId: String): Command0[Res] =
+      withId0(cmd)(newId)
+
+  // ============================================================
+  // Internal Helpers
+  // ============================================================
+
   /** Helper to encode request parameters to JS.Any for IPC.
     *
     * Internal use only - converts request parameters to the format expected by Tauri's IPC layer.
     */
-  private[api] def encodeRequest[Req](req: Req)(using enc: Encoder[Req]): js.Any =
+  private[api] inline def encodeRequest[Req](req: Req)(using enc: Encoder[Req]): js.Any =
     enc.encode(req)
 
   /** Helper to decode response from JS.Any.
     *
     * Internal use only - converts IPC response to the expected Scala type.
     */
-  private[api] def decodeResponse[Res](value: js.Any)(using dec: Decoder[Res]): Either[String, Res] =
+  private[api] inline def decodeResponse[Res](value: js.Any)(using dec: Decoder[Res]): Either[String, Res] =
     dec.decode(value)
 end Command

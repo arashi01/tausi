@@ -106,25 +106,49 @@ yield ()
 
 ## Defining Custom Commands
 
-For custom Tauri plugins, define commands using the `Command` typeclass:
+For custom Tauri plugins, define commands using the `Command.define` factory:
 
 ```scala
-import tausi.api.{Command, CommandId}
-import tausi.api.codec.{Codec, Encoder, Decoder}
+import tausi.api.Command
+import tausi.api.codec.Codec
 
-// 1. Define Parameter Type
-final case class Greet(name: String)
-object Greet:
-  given Codec[Greet] = Codec.derived
+// 1. Define Parameter Type with Codec derivation
+final case class Greet(name: String) derives Codec
 
-// 2. Define Command Instance
-given greet: Command[Greet, String] = new Command[Greet, String]:
-  val id = CommandId.unsafe("greet")
-  given encoder: Encoder[Greet] = summon
-  given decoder: Decoder[String] = summon
+// 2. Define Command using the factory method
+given greet: Command[Greet, String] = Command.define[Greet, String]("greet")
 
 // 3. Usage
 invoke(Greet("Alice"))
+```
+
+### Zero-Argument Commands
+
+For commands that take no parameters:
+
+```scala
+// Define a zero-argument command
+given getVersion: Command0[String] = Command.define0[String]("get_version")
+
+// Usage - no arguments needed
+val version: Future[String] = invoke
+```
+
+### Command Transformations
+
+Commands can be transformed to work with different types:
+
+```scala
+import tausi.api.Command
+
+// Transform response type
+val intVersion: Command0[Int] = getVersion.mapRes(_.toInt)
+
+// Transform request type
+val simpleGreet: Command[String, String] = greet.contramapReq(name => Greet(name))
+
+// Change command ID (useful for testing/mocking)
+val testGreet: Command[Greet, String] = greet.withCommandId("test_greet")
 ```
 
 ## Roadmap

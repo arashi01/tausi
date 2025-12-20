@@ -74,21 +74,28 @@ Unsafe.unsafe { implicit unsafe =>
 ### Defining Custom Commands
 
 ```scala
-import tausi.api.{Command, CommandId}
-import tausi.api.codec.*
+import tausi.api.Command
+import tausi.api.codec.Codec
 
 // Request type with Codec derivation
-final case class SaveSurveyRequest(submission: SurveySubmission)
+final case class SaveSurveyRequest(submission: SurveySubmission) derives Codec
 
-object SaveSurveyRequest:
-  given Codec[SaveSurveyRequest] = Codec.derived
-
-// Command definition
+// Command definition using factory method
 given saveSurvey: Command[SaveSurveyRequest, Unit] =
-  new Command[SaveSurveyRequest, Unit]:
-    val id: CommandId = CommandId.unsafe("save_survey")
-    given encoder: Encoder[SaveSurveyRequest] = summon[Codec[SaveSurveyRequest]]
-    given decoder: Decoder[Unit] = summon[Codec[Unit]]
+  Command.define[SaveSurveyRequest, Unit]("save_survey")
+```
+
+For commands with custom encoders/decoders:
+
+```scala
+import tausi.api.Command
+import tausi.api.codec.{Encoder, Decoder}
+
+given customCommand: Command[MyRequest, MyResponse] =
+  Command.defineWith[MyRequest, MyResponse]("my_command")(
+    myCustomEncoder,
+    myCustomDecoder
+  )
 ```
 
 ### Event System (ZIO)
@@ -141,10 +148,10 @@ object QuestionType:
 ### Reactive State with Var/Signal
 
 ```scala
-final class AppState private (
-  val currentPage: Var[Page],
-  val contactDetails: Var[ContactDetails],
-  val surveyAnswers: Var[Map[String, String]]
+final case class AppState(
+  currentPage: Var[Page],
+  contactDetails: Var[ContactDetails],
+  surveyAnswers: Var[Map[String, String]]
 ):
   def navigateNext(): Unit =
     Page.next(currentPage.now()).foreach(navigateTo)
