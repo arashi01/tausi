@@ -6,11 +6,14 @@ package tausi.sample.pages
 
 import com.raquo.laminar.api.L.*
 
+import zio.Runtime
+
 import tausi.sample.components.*
 import tausi.sample.config.SurveyConfig
 import tausi.sample.model.*
 import tausi.sample.services.SurveyService
 import tausi.sample.state.AppState
+import tausi.zio.*
 
 /** Submit page view with review and submission.
   *
@@ -18,6 +21,8 @@ import tausi.sample.state.AppState
   * The TauriError message is displayed directly to users when submission fails.
   */
 object SubmitPage:
+
+  given Runtime[Any] = Runtime.default
 
   def apply(state: AppState, surveyService: SurveyService): HtmlElement =
     val isSubmitting = Var(false)
@@ -35,12 +40,7 @@ object SubmitPage:
       )
 
       // Use ZIO effect with proper error channel
-      val effect = surveyService.submitSurvey(submission)
-
-      // Run effect with callbacks using the temporary utility
-      // NOTE: This pattern should be simplified by tausi.zio utilities
-      SurveyService.runEffect(
-        effect,
+      surveyService.submitSurvey(submission).runWith(
         onSuccess = _ => {
           isSubmitting.set(false)
           isSubmitted.set(true)
