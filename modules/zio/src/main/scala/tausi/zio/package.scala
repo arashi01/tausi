@@ -24,9 +24,11 @@ import scala.concurrent.ExecutionContext
 
 import _root_.zio.IO
 import _root_.zio.Queue
+import _root_.zio.Runtime
 import _root_.zio.Scope
 import _root_.zio.Trace
 import _root_.zio.UIO
+import _root_.zio.Unsafe
 import _root_.zio.ZIO
 import _root_.zio.stream.ZStream
 
@@ -386,5 +388,75 @@ package object zio:
             .mapError(TauriError.fromThrowable)
             .orDie
       )(using trace)
+  end extension
+
+  // ====================
+  // Effect Execution Extensions
+  // ====================
+
+  /** Extension methods for executing ZIO effects from UI callbacks.
+    *
+    * These extensions provide ergonomic, type-safe effect execution suitable for integration with
+    * UI frameworks like Laminar. All methods require an implicit `Runtime[Any]` in scope.
+    *
+    * @example
+    *   {{{
+    * import tausi.zio.*
+    *
+    * given Runtime[Any] = Runtime.default
+    *
+    * button(
+    *   onClick --> { _ => submitCommand.runWith(handleSuccess, handleError) }
+    * )
+    *   }}}
+    */
+  extension [E <: Throwable, A](effect: IO[E, A])
+
+    /** Execute the effect, invoking a callback on completion.
+      *
+      * The effect is forked to avoid blocking the UI thread. The callback receives the result as
+      * an Either, with Left for errors and Right for success.
+      *
+      * @param onResult
+      *   called with the result (success or failure as Either)
+      */
+    inline def runWith(onResult: Either[E, A] => Unit)(using runtime: Runtime[Any], trace: Trace): Unit =
+      Unsafe.unsafe { implicit unsafe =>
+        val _ = runtime.unsafe.fork(
+          effect.foldZIO(
+            e => ZIO.succeed(onResult(Left(e))),
+            a => ZIO.succeed(onResult(Right(a)))
+          )
+        )
+      }
+
+    /** Execute the effect, invoking separate callbacks for success and failure.
+      *
+      * The effect is forked to avoid blocking the UI thread.
+      *
+      * @param onSuccess
+      *   called if the effect succeeds
+      * @param onError
+      *   called if the effect fails
+      */
+    inline def runWith(onSuccess: A => Unit, onError: E => Unit)(using runtime: Runtime[Any], trace: Trace): Unit =
+      Unsafe.unsafe { implicit unsafe =>
+        val _ = runtime.unsafe.fork(
+          effect.foldZIO(
+            e => ZIO.succeed(onError(e)),
+            a => ZIO.succeed(onSuccess(a))
+          )
+        )
+      }
+
+    /** Execute the effect, ignoring the result.
+      *
+      * '''Warning:''' Errors are silently dropped. Use the callback-accepting overloads for
+      * proper error handling.
+      */
+    inline def runWith()(using runtime: Runtime[Any], trace: Trace): Unit =
+      Unsafe.unsafe { implicit unsafe =>
+        val _ = runtime.unsafe.fork(effect.ignore)
+      }
   end extension
 end zio

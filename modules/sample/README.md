@@ -56,19 +56,25 @@ tausi.sample/
 import tausi.zio.*
 import tausi.sample.commands.survey.{given, *}
 
+given Runtime[Any] = Runtime.default
+
 // Invoke a command with ZIO
 val result: IO[TauriError, Unit] = invoke(SaveSurveyRequest(submission))
 
 // Run with callbacks for Laminar integration
-Unsafe.unsafe { implicit unsafe =>
-  Runtime.default.unsafe
-    .runToFuture(result)
-    .future
-    .onComplete {
-      case Success(_)  => onSuccess()
-      case Failure(ex) => onError(TauriError.fromThrowable(ex))
-    }(using ExecutionContext.global)
+result.runWith(
+  onSuccess = _ => showSuccess(),
+  onError = err => showError(err.message)
+)
+
+// Or with unified Either callback
+result.runWith {
+  case Right(_) => showSuccess()
+  case Left(err) => showError(err.message)
 }
+
+// Or fire-and-forget (errors silently dropped)
+result.runWith()
 ```
 
 ### Defining Custom Commands

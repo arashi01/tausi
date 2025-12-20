@@ -80,6 +80,7 @@ event.emit("frontend-ready", "Hello from Scala.js")
 
 ```scala
 import cats.effect.IO
+import cats.effect.std.Dispatcher
 import tausi.cats.*
 import tausi.api.commands.window.{given, *}
 
@@ -102,6 +103,56 @@ val program: ZIO[Any, TauriError, Unit] = for
   _ <- invoke(SetSize("main", 1024, 768))
   _ <- ZIO.log("Window configured")
 yield ()
+```
+
+### UI Integration (Effect Execution Extensions)
+
+Both effect modules provide `runWith` extension methods for executing effects from UI event handlers:
+
+#### ZIO with Laminar
+
+```scala
+import zio.*
+import tausi.zio.*
+
+given Runtime[Any] = Runtime.default
+
+button(
+  onClick --> { _ =>
+    myCommand.runWith(
+      onSuccess = result => updateUI(result),
+      onError = err => showError(err.message)
+    )
+  }
+)
+
+// Or with unified Either callback
+myEffect.runWith {
+  case Right(result) => handleSuccess(result)
+  case Left(error) => handleError(error)
+}
+
+// Fire-and-forget (errors silently dropped)
+loggingEffect.runWith()
+```
+
+#### Cats Effect with Laminar
+
+```scala
+import cats.effect.IO
+import cats.effect.std.Dispatcher
+import tausi.cats.*
+
+given Dispatcher[IO] = ??? // from IOApp or Resource
+
+button(
+  onClick --> { _ =>
+    myCommand.runWith(
+      onSuccess = result => updateUI(result),
+      onError = err => showError(err.getMessage)
+    )
+  }
+)
 ```
 
 ## Defining Custom Commands

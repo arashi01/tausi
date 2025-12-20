@@ -414,4 +414,65 @@ package object cats:
         IO.executionContext.flatMap: ec =>
           IO.fromFuture(IO(closeable.close(r)(using ec)))
   end extension
+
+  // ====================
+  // Effect Execution Extensions
+  // ====================
+
+  /** Extension methods for executing Cats Effect IO from UI callbacks.
+    *
+    * These extensions provide ergonomic, type-safe effect execution suitable for integration with
+    * UI frameworks like Laminar. All methods require an implicit `Dispatcher[IO]` in scope.
+    *
+    * @example
+    *   {{{
+    * import tausi.cats.*
+    *
+    * given Dispatcher[IO] = ??? // from IOApp or Resource
+    *
+    * button(
+    *   onClick --> { _ => submitCommand.runWith(handleSuccess, handleError) }
+    * )
+    *   }}}
+    */
+  extension [A](effect: IO[A])
+
+    /** Execute the effect, invoking a callback on completion.
+      *
+      * The effect is run via the Dispatcher with fire-and-forget semantics. The callback receives
+      * the result as an Either, with Left for errors and Right for success.
+      *
+      * @param onResult
+      *   called with the result (success or failure as Either)
+      */
+    inline def runWith(onResult: Either[Throwable, A] => Unit)(using dispatcher: Dispatcher[IO]): Unit =
+      dispatcher.unsafeRunAndForget(
+        effect.attempt.flatMap(result => IO(onResult(result)))
+      )
+
+    /** Execute the effect, invoking separate callbacks for success and failure.
+      *
+      * The effect is run via the Dispatcher with fire-and-forget semantics.
+      *
+      * @param onSuccess
+      *   called if the effect succeeds
+      * @param onError
+      *   called if the effect fails
+      */
+    inline def runWith(onSuccess: A => Unit, onError: Throwable => Unit)(using dispatcher: Dispatcher[IO]): Unit =
+      dispatcher.unsafeRunAndForget(
+        effect.attempt.flatMap {
+          case Right(a) => IO(onSuccess(a))
+          case Left(e)  => IO(onError(e))
+        }
+      )
+
+    /** Execute the effect, ignoring the result.
+      *
+      * '''Warning:''' Errors are silently dropped. Use the callback-accepting overloads for
+      * proper error handling.
+      */
+    inline def runWith()(using dispatcher: Dispatcher[IO]): Unit =
+      dispatcher.unsafeRunAndForget(effect.void.handleError(_ => ()))
+  end extension
 end cats
