@@ -82,8 +82,19 @@ private inline def ordinalToValue[A, T <: Tuple](ordinal: Int): A =
 
 /** Encodes Scala values to JavaScript values for Tauri interoperability. */
 trait Encoder[A]:
+  self =>
+
   /** Encode a Scala value to a JavaScript value. */
   def encode(value: A): js.Any
+
+  /** Create a new encoder that transforms input before encoding.
+    *
+    * @param f Function to transform the input type
+    * @return A new Encoder for type B
+    */
+  def contramap[B](f: B => A): Encoder[B] =
+    (value: B) => self.encode(f(value))
+end Encoder
 
 object Encoder:
 
@@ -195,11 +206,22 @@ end Encoder
 
 /** Decodes JavaScript values to Scala values for Tauri interoperability. */
 trait Decoder[A]:
+  self =>
+
   /** Decode a JavaScript value to a Scala value.
     *
     * @return Right with decoded value or Left with error message
     */
   def decode(value: js.Any): Either[String, A]
+
+  /** Create a new decoder that transforms output after decoding.
+    *
+    * @param f Function to transform the decoded value
+    * @return A new Decoder for type B
+    */
+  def map[B](f: A => B): Decoder[B] =
+    (value: js.Any) => self.decode(value).map(f)
+end Decoder
 
 object Decoder:
 
