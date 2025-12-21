@@ -1,182 +1,171 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+//! Tausi Sample - Customer Survey Application
+//!
+//! A real-world example demonstrating Tausi patterns for Tauri integration:
+//!
+//! - Custom command with typed request/response (save_survey)
+//! - File system persistence via Tauri's app data directory
+//! - Clean Rust backend matching Scala frontend models
+
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Write;
-use std::thread;
-use std::time::Duration;
-use tauri::{AppHandle, Emitter, Listener, Manager};
+use tauri::{AppHandle, Manager};
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-// === Survey Types ===
+// ============================================================================
+// Data Models (matching Scala models with Codec derivation)
+// ============================================================================
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ContactDetails {
     first_name: String,
     last_name: String,
-    phone_number: String,
+    email: String,
+    company: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SurveyAnswers {
+    satisfaction: Option<i32>,
+    recommendation: Option<i32>,
+    features: Vec<String>,
+    feedback: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SurveySubmission {
     contact_details: ContactDetails,
-    answers: std::collections::HashMap<String, String>,
+    answers: SurveyAnswers,
     submitted_at: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveSurveyResponse {
+    file_path: String,
+    message: String,
+}
+
+// ============================================================================
+// Commands
+// ============================================================================
+
+/// Save a completed survey to the app's data directory.
+///
+/// This command demonstrates real Tauri backend integration:
+/// - Receives typed data from Scala frontend (via Codec serialization)
+/// - Writes to the platform-specific app data directory
+/// - Returns structured response
+///
+/// Scala frontend defines this as:
+/// ```scala
+/// given saveSurvey: Command[SurveySubmission, SaveSurveyResponse] =
+///   Command.define("save_survey")
+/// ```
 #[tauri::command]
-fn save_survey(app: AppHandle, submission: SurveySubmission) -> Result<(), String> {
-    // Get app data directory
+fn save_survey(app: AppHandle, submission: SurveySubmission) -> Result<SaveSurveyResponse, String> {
+    // Get the app data directory (platform-specific)
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
-    
-    // Create surveys subdirectory if it doesn't exist
+
+    // Create surveys subdirectory
     let surveys_dir = app_data_dir.join("surveys");
     fs::create_dir_all(&surveys_dir)
         .map_err(|e| format!("Failed to create surveys directory: {}", e))?;
-    
-    // Generate filename with timestamp
-    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
-    let filename = format!(
-        "survey_{}_{}.txt",
-        submission.contact_details.last_name.to_lowercase().replace(" ", "_"),
-        timestamp
-    );
-    let filepath = surveys_dir.join(&filename);
-    
+
+    // Generate filename from last name and timestamp
+    let safe_name = submission
+        .contact_details
+        .last_name
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>()
+        .to_lowercase();
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("survey_{}_{}.txt", safe_name, timestamp);
+    let file_path = surveys_dir.join(&filename);
+
     // Format survey content
-    let content = format_survey_content(&submission);
-    
+    let content = format_survey(&submission);
+
     // Write to file
-    let mut file = fs::File::create(&filepath)
-        .map_err(|e| format!("Failed to create survey file: {}", e))?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| format!("Failed to write survey content: {}", e))?;
-    
-    println!("Survey saved to: {:?}", filepath);
-    
-    Ok(())
+    fs::write(&file_path, content)
+        .map_err(|e| format!("Failed to write survey file: {}", e))?;
+
+    let path_str = file_path.to_string_lossy().to_string();
+
+    Ok(SaveSurveyResponse {
+        file_path: path_str,
+        message: "Thank you! Your survey has been saved.".to_string(),
+    })
 }
 
-fn format_survey_content(submission: &SurveySubmission) -> String {
-    let contact = &submission.contact_details;
-    let mut content = String::new();
-    
-    content.push_str("=====================================\n");
-    content.push_str("     CUSTOMER SATISFACTION SURVEY    \n");
-    content.push_str("=====================================\n\n");
-    
-    content.push_str(&format!("Submitted: {}\n\n", submission.submitted_at));
-    
-    content.push_str("--- Contact Information ---\n");
-    content.push_str(&format!("Name: {} {}\n", contact.first_name, contact.last_name));
-    content.push_str(&format!("Phone: {}\n\n", contact.phone_number));
-    
-    content.push_str("--- Survey Responses ---\n");
-    
-    // Sort answers by key for consistent output
-    let mut sorted_answers: Vec<_> = submission.answers.iter().collect();
-    sorted_answers.sort_by_key(|(k, _)| k.as_str());
-    
-    for (question_id, answer) in sorted_answers {
-        let question_label = format_question_label(question_id);
-        content.push_str(&format!("\n{}\n", question_label));
-        content.push_str(&format!("Answer: {}\n", answer));
+/// Format survey submission as human-readable text.
+fn format_survey(submission: &SurveySubmission) -> String {
+    let mut lines = Vec::new();
+
+    lines.push("=".repeat(60));
+    lines.push("CUSTOMER SURVEY SUBMISSION".to_string());
+    lines.push("=".repeat(60));
+    lines.push(String::new());
+
+    lines.push("CONTACT INFORMATION".to_string());
+    lines.push("-".repeat(40));
+    lines.push(format!(
+        "Name: {} {}",
+        submission.contact_details.first_name, submission.contact_details.last_name
+    ));
+    lines.push(format!("Email: {}", submission.contact_details.email));
+    if !submission.contact_details.company.is_empty() {
+        lines.push(format!("Company: {}", submission.contact_details.company));
     }
-    
-    content.push_str("\n=====================================\n");
-    content.push_str("        Thank you for your feedback!  \n");
-    content.push_str("=====================================\n");
-    
-    content
-}
+    lines.push(String::new());
 
-fn format_question_label(question_id: &str) -> String {
-    match question_id {
-        "overall_satisfaction" => "Overall Satisfaction (1-5)".to_string(),
-        "recommendation_likelihood" => "Likelihood to Recommend (1-5)".to_string(),
-        "service_quality" => "Service Quality Rating (1-5)".to_string(),
-        "communication_rating" => "Communication Rating (1-5)".to_string(),
-        "industry" => "Industry".to_string(),
-        "product_line" => "Product Line".to_string(),
-        "feedback_topic" => "Feedback Focus Area".to_string(),
-        "best_aspect" => "What do you like most?".to_string(),
-        "improvement_suggestion" => "What could we do better?".to_string(),
-        "additional_feedback" => "Additional Comments".to_string(),
-        _ => question_id.replace("_", " ").to_string(),
+    lines.push("RATINGS".to_string());
+    lines.push("-".repeat(40));
+    if let Some(sat) = submission.answers.satisfaction {
+        lines.push(format!("Overall Satisfaction: {}/5", sat));
     }
-}
+    if let Some(rec) = submission.answers.recommendation {
+        lines.push(format!("Recommendation Likelihood: {}/5", rec));
+    }
+    lines.push(String::new());
 
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CounterUpdate {
-    count: i32,
-    timestamp: u64,
-}
-
-#[tauri::command]
-async fn start_counter(app: AppHandle, max: i32) -> Result<String, String> {
-    let app_clone = app.clone();
-
-    thread::spawn(move || {
-        for i in 1..=max {
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-
-            let update = CounterUpdate {
-                count: i,
-                timestamp,
-            };
-
-            app_clone.emit("counter-update", &update).ok();
-            thread::sleep(Duration::from_millis(500));
+    if !submission.answers.features.is_empty() {
+        lines.push("IMPORTANT FEATURES".to_string());
+        lines.push("-".repeat(40));
+        for feature in &submission.answers.features {
+            lines.push(format!("• {}", feature));
         }
-
-        app_clone.emit("counter-finished", ()).ok();
-    });
-
-    Ok(format!("Counter started with max value: {}", max))
-}
-
-#[derive(Deserialize)]
-struct EchoPayload {
-    message: String,
-}
-
-#[tauri::command]
-fn echo(payload: EchoPayload) -> Result<String, String> {
-    if payload.message.is_empty() {
-        Err("Message cannot be empty".to_string())
-    } else {
-        Ok(format!("Echo: {}", payload.message))
+        lines.push(String::new());
     }
+
+    if !submission.answers.feedback.is_empty() {
+        lines.push("ADDITIONAL FEEDBACK".to_string());
+        lines.push("-".repeat(40));
+        lines.push(submission.answers.feedback.clone());
+        lines.push(String::new());
+    }
+
+    lines.push("=".repeat(60));
+    lines.push(format!("Submitted: {}", submission.submitted_at));
+    lines.push("=".repeat(60));
+
+    lines.join("\n")
 }
+
+// ============================================================================
+// Application Entry Point
+// ============================================================================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, start_counter, echo, save_survey])
-        .setup(|app| {
-            // Listen for frontend events
-            let app_handle = app.handle().clone();
-            app.listen("frontend-ready", move |_event| {
-                println!("Frontend is ready!");
-                app_handle
-                    .emit("backend-ready", "Backend initialized successfully")
-                    .ok();
-            });
-            Ok(())
-        })
+        .invoke_handler(tauri::generate_handler![save_survey])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

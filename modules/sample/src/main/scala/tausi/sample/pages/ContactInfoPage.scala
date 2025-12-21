@@ -5,82 +5,81 @@
 package tausi.sample.pages
 
 import com.raquo.laminar.api.L.*
+
 import tausi.sample.components.*
-import tausi.sample.model.ValidationResult
+import tausi.sample.model.ContactDetails
 import tausi.sample.state.AppState
-import tausi.sample.validation.Validators
 
-/** Contact information page view. */
+/** Contact information page - collects user details with validation. */
 object ContactInfoPage:
-
   def apply(state: AppState): HtmlElement =
-    val showValidation = Var(false)
-
-    val firstNameValidation: Signal[Option[ValidationResult]] =
-      showValidation.signal.combineWith(state.contactDetails.signal).map {
-        case (false, _) => None
-        case (true, contact) =>
-          Some(Validators.nonEmpty(contact.firstName, "First name"))
-      }
-
-    val lastNameValidation: Signal[Option[ValidationResult]] =
-      showValidation.signal.combineWith(state.contactDetails.signal).map {
-        case (false, _) => None
-        case (true, contact) =>
-          Some(Validators.nonEmpty(contact.lastName, "Last name"))
-      }
-
-    val phoneValidation: Signal[Option[ValidationResult]] =
-      showValidation.signal.combineWith(state.contactDetails.signal).map {
-        case (false, _) => None
-        case (true, contact) =>
-          if contact.phoneNumber.trim.isEmpty then
-            Some(ValidationResult.Invalid("Phone number is required"))
-          else
-            Some(Validators.phoneNumber(contact.phoneNumber))
-      }
-
-    val isValid: Signal[Boolean] =
-      state.contactDetails.signal.map(Validators.isContactValid)
-
-    def handleNext(): Unit =
-      showValidation.set(true)
-      if Validators.isContactValid(state.contactDetails.now()) then state.navigateNext()
-
     Layout.card(
-      Layout.sectionHeader(
-        "Contact Information",
-        Some("Please provide your contact details so we can follow up if needed.")
-      ),
-      form(
-        onSubmit.preventDefault --> { _ => handleNext() },
-        FormInputs.textInput(
-          id = "firstName",
+      Layout.pageHeader("Contact Information", Some("Please provide your details")),
+      div(
+        cls := "space-y-6",
+        // First Name
+        FormField(
           labelText = "First Name",
-          placeholderText = "Enter your first name",
+          required = true,
           valueSignal = state.contactDetails.signal.map(_.firstName),
-          onValueChange = v => state.updateContactDetails(_.copy(firstName = v)),
-          validationSignal = firstNameValidation
+          onUpdate = v => state.contactDetails.update(_.copy(firstName = v)),
+          placeholderText = "Enter your first name"
         ),
-        FormInputs.textInput(
-          id = "lastName",
+        // Last Name
+        FormField(
           labelText = "Last Name",
-          placeholderText = "Enter your last name",
+          required = true,
           valueSignal = state.contactDetails.signal.map(_.lastName),
-          onValueChange = v => state.updateContactDetails(_.copy(lastName = v)),
-          validationSignal = lastNameValidation
+          onUpdate = v => state.contactDetails.update(_.copy(lastName = v)),
+          placeholderText = "Enter your last name"
         ),
-        FormInputs.phoneInput(
-          id = "phoneNumber",
-          labelText = "Phone Number",
-          valueSignal = state.contactDetails.signal.map(_.phoneNumber),
-          onValueChange = v => state.updateContactDetails(_.copy(phoneNumber = v)),
-          validationSignal = phoneValidation
+        // Email
+        FormField(
+          labelText = "Email Address",
+          required = true,
+          valueSignal = state.contactDetails.signal.map(_.email),
+          onUpdate = v => state.contactDetails.update(_.copy(email = v)),
+          placeholderText = "you@company.com",
+          inputType = "email"
         ),
-        Layout.buttonGroup(
-          Buttons.secondary("Back", () => state.navigatePrevious()),
-          Buttons.primary("Continue", () => handleNext())
+        // Company
+        FormField(
+          labelText = "Company",
+          required = false,
+          valueSignal = state.contactDetails.signal.map(_.company),
+          onUpdate = v => state.contactDetails.update(_.copy(company = v)),
+          placeholderText = "Your company name (optional)"
+        )
+      ),
+      // Navigation
+      div(
+        cls := "flex justify-between mt-8",
+        Buttons.secondary("Back", () => state.navigatePrevious()),
+        Buttons.primary("Continue", () => state.navigateNext(), state.isContactComplete.map(!_))
+      )
+    )
+
+  private def FormField(
+      labelText: String,
+      required: Boolean,
+      valueSignal: Signal[String],
+      onUpdate: String => Unit,
+      placeholderText: String,
+      inputType: String = "text"
+  ): HtmlElement =
+    div(
+      label(
+        cls := "block text-sm font-medium text-text-primary mb-2",
+        labelText,
+        if required then span(cls := "text-error ml-1", "*") else emptyNode
+      ),
+      input(
+        cls := "w-full px-4 py-3 bg-surface-700 border border-border rounded-lg text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors",
+        typ := inputType,
+        placeholder := placeholderText,
+        controlled(
+          value <-- valueSignal,
+          onInput.mapToValue --> onUpdate
         )
       )
     )
-end ContactInfoPage

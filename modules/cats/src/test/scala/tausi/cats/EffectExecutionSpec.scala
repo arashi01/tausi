@@ -27,6 +27,8 @@ import cats.effect.std.Dispatcher
 
 import munit.CatsEffectSuite
 
+import tausi.api.TauriError
+
 /** Tests for effect execution extensions.
   *
   * Tests the `runWith` overloads for executing Cats Effect IO from callback contexts.
@@ -44,7 +46,7 @@ class EffectExecutionSpec extends CatsEffectSuite:
   dispatcherFixture.test("runWith(Either) should invoke callback with Right on success"): dispatcher =>
     given Dispatcher[IO] = dispatcher
     for
-      deferred <- Deferred[IO, Either[Throwable, Int]]
+      deferred <- Deferred[IO, Either[TauriError, Int]]
       effect = IO.pure(42)
       _ = effect.runWith(result => dispatcher.unsafeRunAndForget(deferred.complete(result)))
       result <- deferred.get.timeout(1.second)
@@ -53,13 +55,15 @@ class EffectExecutionSpec extends CatsEffectSuite:
   dispatcherFixture.test("runWith(Either) should invoke callback with Left on failure"): dispatcher =>
     given Dispatcher[IO] = dispatcher
     for
-      deferred <- Deferred[IO, Either[Throwable, Int]]
+      deferred <- Deferred[IO, Either[TauriError, Int]]
       effect: IO[Int] = IO.raiseError(TestException("boom"))
       _ = effect.runWith(result => dispatcher.unsafeRunAndForget(deferred.complete(result)))
       result <- deferred.get.timeout(1.second)
     yield
       assert(result.isLeft)
-      assertEquals(result.left.toOption.map(_.getMessage), Some("boom"))
+      // The error is wrapped in TauriError.GenericError via fromThrowable
+      assert(result.left.toOption.exists(_.isInstanceOf[TauriError.GenericError])) // scalafix:ok
+      assert(result.left.toOption.exists(_.message.contains("boom")))
 
   // ====================
   // runWith(onSuccess, onError) tests
@@ -84,10 +88,14 @@ class EffectExecutionSpec extends CatsEffectSuite:
       effect: IO[Int] = IO.raiseError(TestException("failure"))
       _ = effect.runWith(
             onSuccess = _ => (),
-            onError = e => dispatcher.unsafeRunAndForget(deferred.complete(e.getMessage))
+            // onError receives TauriError, use .message
+            onError = e => dispatcher.unsafeRunAndForget(deferred.complete(e.message))
           )
       result <- deferred.get.timeout(1.second)
-    yield assertEquals(result, "failure")
+    yield
+      // Error is wrapped in TauriError.UnexpectedError with message "Unexpected error: failure"
+      assert(result.contains("failure"))
+    end for
 
   // ====================
   // runWithUnsafe() (fire-and-forget) tests

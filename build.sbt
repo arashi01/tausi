@@ -87,14 +87,27 @@ val `tausi-zio` =
     .settings(libraryDependencies += libraries.`zio-streams`.value)
     .settings(libraryDependencies += libraries.`munit-zio`.value)
 
+val `tausi-laminar` =
+  project
+    .in(file("modules/laminar"))
+    .enablePlugins(ScalaJSPlugin)
+    .settings(compilerSettings)
+    .settings(unitTestSettings)
+    .settings(fileHeaderSettings)
+    .settings(publishSettings)
+    .dependsOn(`tausi-api`.js)
+    .settings(libraryDependencies += libraries.laminar.value)
+
 val `tausi-sample` =
   project
     .in(file("modules/sample"))
     .enablePlugins(ScalaJSPlugin)
-    .dependsOn(`tausi-zio`)
+    .dependsOn(`tausi-zio`, `tausi-laminar`)
+    .settings(unitTestSettings)
     .settings(libraryDependencies += libraries.laminar.value)
     .settings(libraryDependencies += libraries.waypoint.value)
     .settings(libraryDependencies += libraries.`scala-java-time`.value)
+    .settings(libraryDependencies += libraries.`munit-zio`.value)
     .settings(scalaJSUseMainModuleInitializer := true)
     .settings(scalaJSLinkerConfig ~= { c =>
       import org.scalajs.linker.interface.*
@@ -118,7 +131,8 @@ val `tausi-js` =
     .aggregate(
       `tausi-api`.js,
       `tausi-cats`,
-      `tausi-zio`
+      `tausi-zio`,
+      `tausi-laminar`
     )
 
 lazy val `tausi-root` =

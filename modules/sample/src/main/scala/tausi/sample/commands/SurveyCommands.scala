@@ -5,18 +5,34 @@
 package tausi.sample.commands
 
 import tausi.api.Command
-import tausi.api.codec.*
-import tausi.sample.model.SurveySubmission
+import tausi.sample.model.*
 
-/** Survey-related Tauri commands. */
+/** Custom Tauri commands for the survey application.
+  *
+  * Demonstrates the recommended pattern for defining application-specific
+  * commands using Command.define.
+  *
+  * @example
+  *   {{{
+  * import tausi.sample.commands.survey.{given, *}
+  * import tausi.zio.*
+  *
+  * invoke(SaveSurveyRequest(submission)).runWith(
+  *   onSuccess = response => println(s"Saved to: ${response.filePath}"),
+  *   onError = err => println(s"Error: ${err.message}")
+  * )
+  *   }}}
+  */
 object survey:
-  /** Request to save a survey submission. */
-  final case class SaveSurveyRequest(submission: SurveySubmission) derives Codec
 
-  /** Command to save survey to file.
+  /** Command to save a completed survey to file storage.
     *
-    * Uses Command.define factory for concise definition.
+    * This command invokes the Rust backend's `save_survey` function,
+    * which persists the survey data to the app's data directory.
+    *
+    * The `SaveSurveyRequest` wrapper has a field named `submission` which
+    * matches the Rust function parameter, enabling Tauri's IPC layer to
+    * correctly deserialize the request.
     */
-  given saveSurvey: Command[SaveSurveyRequest, Unit] =
-    Command.define[SaveSurveyRequest, Unit]("save_survey")
-end survey
+  given saveSurvey: Command[SaveSurveyRequest, SaveSurveyResponse] =
+    Command.define[SaveSurveyRequest, SaveSurveyResponse]("save_survey")

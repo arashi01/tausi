@@ -115,6 +115,16 @@ object TauriError:
     cause: Option[Throwable] = None
   ) extends TauriError(message, cause)
 
+  /** Error occurred during stream operations.
+    *
+    * @param message Description of what went wrong
+    * @param cause Optional underlying exception
+    */
+  final case class StreamError(
+    message: String,
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
+
   /** Error occurred during event operations.
     *
     * @param eventName The event name
@@ -180,6 +190,11 @@ object TauriError:
     def apply(channelId: CallbackId, message: String): ChannelError =
       new ChannelError(channelId, message, None)
 
+  object StreamError:
+    /** Create StreamError without cause */
+    def apply(message: String): StreamError =
+      new StreamError(message, None)
+
   object EventError:
     /** Create EventError without cause */
     def apply(eventName: String, message: String): EventError =
@@ -199,7 +214,7 @@ object TauriError:
 
   extension (error: TauriError)
     /** Extract human-readable error message from any TauriError variant. */
-    def message: String = error match
+    inline def message: String = error match
       case e: InvokeError            => e.message
       case e: PluginError            => e.message
       case e: PermissionError        => e.message
@@ -207,12 +222,13 @@ object TauriError:
       case e: ConversionError        => e.message
       case e: CallbackError          => e.message
       case e: ChannelError           => e.message
+      case e: StreamError            => e.message
       case e: EventError             => e.message
       case e: GenericError           => e.message
       case e: TauriNotAvailableError => e.message
 
     /** Extract optional underlying cause from any TauriError variant. */
-    def cause: Option[Throwable] = error match
+    inline def cause: Option[Throwable] = error match
       case e: InvokeError            => e.cause
       case e: PluginError            => e.cause
       case e: PermissionError        => e.cause
@@ -220,6 +236,7 @@ object TauriError:
       case e: ConversionError        => e.cause
       case e: CallbackError          => e.cause
       case e: ChannelError           => e.cause
+      case e: StreamError            => e.cause
       case e: EventError             => e.cause
       case e: GenericError           => e.cause
       case _: TauriNotAvailableError => None
@@ -231,12 +248,9 @@ object TauriError:
 
   /** Wrap any Throwable into a TauriError.
     *
-    * If already a TauriError, returns as-is. Otherwise, wraps in GenericError.
-    *
-    * @param t The throwable to wrap
-    * @return TauriError variant
+    * Returns the input unchanged if already a TauriError, otherwise wraps in [[GenericError]].
     */
-  def fromThrowable(t: Throwable): TauriError = t match
+  inline def fromThrowable(t: Throwable): TauriError = t match
     case e: TauriError => e
     case e             => GenericError(s"Unexpected error: ${e.getMessage}", Some(e))
 
