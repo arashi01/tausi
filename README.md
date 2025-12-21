@@ -28,6 +28,9 @@ libraryDependencies += "io.github.arashi01" %%% "tausi-cats" % "0.0.1-SNAPSHOT"
 
 // Optional: ZIO Integration
 libraryDependencies += "io.github.arashi01" %%% "tausi-zio" % "0.0.1-SNAPSHOT"
+
+// Optional: Laminar Integration (stream-to-Laminar bridge)
+libraryDependencies += "io.github.arashi01" %%% "tausi-laminar" % "0.0.1-SNAPSHOT"
 ```
 
 ## Usage
@@ -167,6 +170,60 @@ button(
       onSuccess = result => updateUI(result),
       onError = err => showError(err.getMessage)
     )
+  }
+)
+```
+
+### Laminar Integration (Stream-to-Laminar Bridge)
+
+Tausi provides a type-safe bridge between effect streams (ZIO ZStream, fs2 Stream) and Laminar observables:
+
+```scala
+// Add dependency
+libraryDependencies += "io.github.arashi01" %%% "tausi-laminar" % "0.0.1-SNAPSHOT"
+```
+
+```scala
+import tausi.laminar.*
+import tausi.zio.ZStreamIO
+import tausi.zio.ZStreamIO.given
+import zio.stream.ZStream
+
+// Create a ZIO stream
+val counter: ZStreamIO[Int] = ZStream.iterate(0)(_ + 1).take(10)
+
+// Tier 1: Unsafe (errors logged, dropped) - for prototyping
+val eventStream: EventStream[Int] = counter.toStreamUnsafe
+
+// Tier 2: Either-based (errors as values)
+val signal: Signal[Either[TauriError, Int]] =
+  counter.toSignal(Left(TauriError.StreamError("Loading...")))
+
+// Tier 3: Full state (recommended for production)
+val stateSignal: Signal[StreamState[Int]] = counter.toStateSignal
+```
+
+The `StreamState` ADT provides full lifecycle visibility:
+
+```scala
+enum StreamState[+A]:
+  case Running                         // Stream is loading
+  case Value(value: A)                 // Latest value received
+  case Failed(error: TauriError)       // Stream failed
+  case Completed                       // Stream completed (no final value)
+  case CompletedWith(value: A)         // Stream completed with final value
+```
+
+Usage in Laminar:
+
+```scala
+div(
+  child <-- myStream.toStateSignal.map {
+    case StreamState.Running           => div(cls := "spinner", "Loading...")
+    case StreamState.Value(data)       => renderData(data)
+    case StreamState.Failed(err)       => div(cls := "error", err.message)
+    case StreamState.Completed         => div("Done")
+    case StreamState.CompletedWith(d)  => renderData(d)
   }
 )
 ```

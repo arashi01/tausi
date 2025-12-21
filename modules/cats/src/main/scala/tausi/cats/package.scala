@@ -487,28 +487,36 @@ package object cats:
       * The effect is run via the Dispatcher with fire-and-forget semantics. The callback receives
       * the result as an Either, with Left for errors and Right for success.
       *
+      * All errors are normalised to [[TauriError]], ensuring consistent error handling
+      * across the entire Tausi API.
+      *
       * @param onResult
       *   called with the result (success or failure as Either)
       */
-    inline def runWith(onResult: Either[Throwable, A] => Unit)(using dispatcher: Dispatcher[IO]): Unit =
+    inline def runWith(onResult: Either[TauriError, A] => Unit)(using dispatcher: Dispatcher[IO]): Unit =
       dispatcher.unsafeRunAndForget(
-        effect.attempt.flatMap(result => IO(onResult(result)))
+        effect.attempt.flatMap { result =>
+          val normalised: Either[TauriError, A] = result.left.map(TauriError.fromThrowable)
+          IO(onResult(normalised))
+        }
       )
 
     /** Execute the effect, invoking separate callbacks for success and failure.
       *
       * The effect is run via the Dispatcher with fire-and-forget semantics.
+      * All errors are normalised to [[TauriError]], ensuring consistent error handling
+      * across the entire Tausi API.
       *
       * @param onSuccess
       *   called if the effect succeeds
       * @param onError
-      *   called if the effect fails
+      *   called if the effect fails (with normalised [[TauriError]])
       */
-    inline def runWith(onSuccess: A => Unit, onError: Throwable => Unit)(using dispatcher: Dispatcher[IO]): Unit =
+    inline def runWith(onSuccess: A => Unit, onError: TauriError => Unit)(using dispatcher: Dispatcher[IO]): Unit =
       dispatcher.unsafeRunAndForget(
         effect.attempt.flatMap {
           case Right(a) => IO(onSuccess(a))
-          case Left(e)  => IO(onError(e))
+          case Left(e)  => IO(onError(TauriError.fromThrowable(e)))
         }
       )
 

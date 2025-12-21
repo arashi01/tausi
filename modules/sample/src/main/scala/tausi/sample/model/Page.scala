@@ -4,42 +4,54 @@
  */
 package tausi.sample.model
 
-/** Application navigation pages. */
-enum Page(val title: String):
-  case Welcome extends Page("Welcome")
-  case ContactInfo extends Page("Contact Info")
-  case SurveyPageOne extends Page("Experience")
-  case SurveyPageTwo extends Page("Feedback")
-  case Submit extends Page("Submit")
-
-  /** Get the step number (1-indexed) for progress indicator. */
-  def stepNumber: Int = this match
-    case Page.Welcome       => 1
-    case Page.ContactInfo   => 2
-    case Page.SurveyPageOne => 3
-    case Page.SurveyPageTwo => 4
-    case Page.Submit        => 5
-end Page
+/** Navigation pages for the customer survey wizard.
+  *
+  * The survey follows a linear wizard flow with progress tracking.
+  */
+enum Page(val stepNumber: Int):
+  case Welcome extends Page(1)
+  case ContactInfo extends Page(2)
+  case SurveyQuestions extends Page(3)
+  case Review extends Page(4)
+  case Complete extends Page(5)
 
 object Page:
   given CanEqual[Page, Page] = CanEqual.derived
 
-  /** Get the next page in the flow. */
-  def next(current: Page): Option[Page] = current match
-    case Page.Welcome       => Some(Page.ContactInfo)
-    case Page.ContactInfo   => Some(Page.SurveyPageOne)
-    case Page.SurveyPageOne => Some(Page.SurveyPageTwo)
-    case Page.SurveyPageTwo => Some(Page.Submit)
-    case Page.Submit        => None
-
-  /** Get the previous page in the flow. */
-  def previous(current: Page): Option[Page] = current match
-    case Page.Welcome       => None
-    case Page.ContactInfo   => Some(Page.Welcome)
-    case Page.SurveyPageOne => Some(Page.ContactInfo)
-    case Page.SurveyPageTwo => Some(Page.SurveyPageOne)
-    case Page.Submit        => Some(Page.SurveyPageTwo)
-
-  /** Total number of steps. */
+  /** Total number of wizard steps. */
   val totalSteps: Int = 5
-end Page
+
+  /** All pages in wizard order. */
+  val all: List[Page] = List(Welcome, ContactInfo, SurveyQuestions, Review, Complete)
+
+  extension (p: Page)
+    /** Display title for the page. */
+    def title: String = p match
+      case Welcome         => "Welcome"
+      case ContactInfo     => "Contact Info"
+      case SurveyQuestions => "Survey"
+      case Review          => "Review"
+      case Complete        => "Complete"
+
+    /** Next page in the wizard, if any. */
+    def next: Option[Page] = p match
+      case Welcome         => Some(ContactInfo)
+      case ContactInfo     => Some(SurveyQuestions)
+      case SurveyQuestions => Some(Review)
+      case Review          => Some(Complete)
+      case Complete        => None
+
+    /** Previous page in the wizard, if any. */
+    def previous: Option[Page] = p match
+      case Welcome         => None
+      case ContactInfo     => Some(Welcome)
+      case SurveyQuestions => Some(ContactInfo)
+      case Review          => Some(SurveyQuestions)
+      case Complete        => None
+
+    /** Whether this is the first page. */
+    def isFirst: Boolean = p == Welcome
+
+    /** Whether this is the last page. */
+    def isLast: Boolean = p == Complete
+

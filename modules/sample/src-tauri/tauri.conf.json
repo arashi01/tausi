@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Customer Survey",
+  "productName": "Tausi Demo",
   "version": "0.1.0",
   "identifier": "tausi.sample",
   "build": {
@@ -13,11 +13,12 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Customer Satisfaction Survey",
-        "width": 860,
-        "height": 960,
-        "minWidth": 480,
-        "minHeight": 640,
+        "label": "main",
+        "title": "Tausi Demo",
+        "width": 960,
+        "height": 800,
+        "minWidth": 640,
+        "minHeight": 480,
         "resizable": true,
         "center": true,
         "decorations": true,

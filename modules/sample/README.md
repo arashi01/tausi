@@ -1,16 +1,16 @@
-# Tausi Sample: Customer Survey Application
+# Tausi Survey Wizard Sample
 
-A comprehensive sample application demonstrating the Tausi API for building Tauri desktop applications with Scala.js, Laminar, and ZIO.
+A real-world sample application demonstrating the Tausi API for building Tauri desktop applications with Scala.js, Laminar, and ZIO.
 
 ## Overview
 
-This sample implements a multi-page customer survey application with:
+This sample showcases the core Tausi features through a multi-step survey wizard:
 
-- **Welcome page** - Introduction and survey overview
-- **Contact Information** - Collect user details with validation
-- **Survey Page 1** - Rating-based questions (1-5 scale)
-- **Survey Page 2** - Multi-choice and text response questions
-- **Submit** - Review and submit with file persistence
+- **Multi-page wizard navigation** with reactive state management
+- **Type-safe command invocation** with Rust backend integration
+- **Event emission and streaming** with Laminar signal integration
+- **Form state management** using Laminar Var/Signal
+- **Stream-to-Laminar bridge** demonstrating the `toStateSignal` pattern
 
 ## Architecture
 
@@ -18,150 +18,136 @@ This sample implements a multi-page customer survey application with:
 
 ```
 tausi.sample/
-├── Main.scala              # Application entry point
-├── App.scala               # Root Laminar component
+├── Main.scala                # Application entry point, patterns documented
 ├── commands/
-│   └── SurveyCommands.scala  # Tauri command definitions
+│   └── SurveyCommands.scala  # Custom Tauri command definitions
+├── events/
+│   └── SurveyEvents.scala    # Custom event definitions
 ├── components/
-│   ├── Buttons.scala        # Button components
-│   ├── FormInputs.scala     # Form input components
-│   ├── Layout.scala         # Layout components
-│   └── ProgressIndicator.scala
-├── config/
-│   └── SurveyConfig.scala   # Survey question configuration
+│   ├── Buttons.scala         # Reusable button components
+│   ├── CodeBlock.scala       # Code example display
+│   ├── EventLog.scala        # Stream-to-Laminar demo (toStateSignal)
+│   └── Layout.scala          # Layout components
 ├── model/
-│   ├── Page.scala           # Navigation state
-│   └── SurveyData.scala     # Data models
+│   ├── DemoModels.scala      # Domain models with Codec derivation
+│   └── Page.scala            # Navigation state
 ├── pages/
-│   ├── WelcomePage.scala
-│   ├── ContactInfoPage.scala
-│   ├── SurveyPageOne.scala
-│   ├── SurveyPageTwo.scala
-│   └── SubmitPage.scala
-├── services/
-│   ├── SurveyService.scala    # Synchronous service
-│   ├── ZioSurveyService.scala # ZIO-based async service
-│   └── EventDemos.scala       # Event system demos
-├── state/
-│   └── AppState.scala       # Reactive state management
-└── validation/
-    └── Validators.scala     # Form validation logic
+│   ├── WelcomePage.scala       # Step 1: Welcome and instructions
+│   ├── ContactInfoPage.scala   # Step 2: Contact details form
+│   ├── SurveyQuestionsPage.scala # Step 3: Survey questions
+│   ├── ReviewPage.scala        # Step 4: Review before submission
+│   └── CompletePage.scala      # Step 5: Submit with command invocation
+└── state/
+    └── AppState.scala        # Reactive state management
 ```
 
-## Tausi API Usage
+## Feature Demonstrations
 
-### Command Invocation (ZIO)
+### Command Invocation
+
+Type-safe Tauri command invocation with ZIO integration:
 
 ```scala
-import tausi.zio.*
 import tausi.sample.commands.survey.{given, *}
+import tausi.sample.model.*
+import tausi.zio.*
 
-given Runtime[Any] = Runtime.default
+// 1. Define domain models with Codec derivation
+final case class SurveySubmission(
+  contactDetails: ContactDetails,
+  answers: SurveyAnswers,
+  submittedAt: String
+) derives Codec
 
-// Invoke a command with ZIO
-val result: IO[TauriError, Unit] = invoke(SaveSurveyRequest(submission))
-
-// Run with callbacks for Laminar integration
-result.runWith(
-  onSuccess = _ => showSuccess(),
-  onError = err => showError(err.message)
-)
-
-// Or with unified Either callback
-result.runWith {
-  case Right(_) => showSuccess()
-  case Left(err) => showError(err.message)
-}
-
-// Or fire-and-forget (errors silently dropped - use with caution)
-result.runWithUnsafe()
-```
-
-### Defining Custom Commands
-
-```scala
-import tausi.api.Command
-import tausi.api.codec.Codec
-
-// Request type with Codec derivation
+// 2. Define request wrapper (field name must match Rust param)
 final case class SaveSurveyRequest(submission: SurveySubmission) derives Codec
 
-// Command definition using factory method
-given saveSurvey: Command[SaveSurveyRequest, Unit] =
-  Command.define[SaveSurveyRequest, Unit]("save_survey")
-```
+// 3. Define command using factory method
+given saveSurvey: Command[SaveSurveyRequest, SaveSurveyResponse] =
+  Command.define("save_survey")
 
-For commands with custom encoders/decoders:
-
-```scala
-import tausi.api.Command
-import tausi.api.codec.{Encoder, Decoder}
-
-given customCommand: Command[MyRequest, MyResponse] =
-  Command.defineWith[MyRequest, MyResponse]("my_command")(
-    myCustomEncoder,
-    myCustomDecoder
-  )
-```
-
-### Event System (ZIO)
-
-Events use a type-safe `Event[A]` abstraction that couples event identity with payload type:
-
-```scala
-import tausi.api.Event
-import tausi.api.codec.Codec
-import tausi.zio.events
-
-// 1. Define event payload types
-final case class SurveyEvent(eventType: String, data: String) derives Codec
-
-// 2. Define events as given instances
-given surveyEvent: Event[SurveyEvent] = Event.define("survey-event")
-given backendReady: Event[String] = Event.define("backend-ready")
-given frontendReady: Event[Unit] = Event.define0("frontend-ready")
-
-// 3. Listen for events - handler receives Either for error handling
-val handle: IO[TauriError, EventHandle] = events.listen[SurveyEvent] {
-  case Right(msg) => handleEvent(msg.payload)
-  case Left(err)  => println(s"Decode error: ${err.message}")
-}
-
-// 4. Listen for single event
-val once: IO[TauriError, EventHandle] = events.once[String] {
-  case Right(msg) => println(s"Backend ready: ${msg.payload}")
-  case Left(err)  => println(s"Error: ${err.message}")
-}
-
-// 5. Emit events - type verified against Event instance
-val emit: IO[TauriError, Unit] = events.emit(())  // Uses frontendReady
-val emitWithPayload: IO[TauriError, Unit] = events.emit(SurveyEvent("submit", "data"))
-```
-
-### Codec Derivation
-
-```scala
-import tausi.api.codec.Codec
-
-// Automatic derivation for case classes
-final case class ContactDetails(
-  firstName: String,
-  lastName: String,
-  phoneNumber: String
+// 4. Invoke with typed request
+invoke(SaveSurveyRequest(submission)).runWith(
+  onSuccess = response => showSuccess(s"Saved to: ${response.filePath}"),
+  onError = err => showError(err.message)
 )
-
-object ContactDetails:
-  given Codec[ContactDetails] = Codec.derived
-
-// Enums also supported
-enum QuestionType:
-  case Rating, Text, MultiChoice
-
-object QuestionType:
-  given Codec[QuestionType] = Codec.derived
 ```
 
-## Laminar Patterns
+### Event Emission
+
+Type-safe event emission for frontend-to-backend communication:
+
+```scala
+import tausi.sample.events.SurveyEvents.{given, *}
+import tausi.zio.*
+
+// 1. Define event payload with Codec
+final case class SurveySubmittedEvent(
+  success: Boolean,
+  filePath: String,
+  error: Option[String]
+) derives Codec
+
+// 2. Define event as given instance
+given surveySubmitted: Event[SurveySubmittedEvent] =
+  Event.define("survey-submitted")
+
+// 3. Emit typed events
+events.emit(SurveySubmittedEvent(
+  success = true,
+  filePath = response.filePath,
+  error = None
+)).runWith(
+  onSuccess = _ => (),
+  onError = err => logError(err.message)
+)
+```
+
+### Stream-to-Laminar Bridge (EventLog Component)
+
+Converting ZIO streams to Laminar signals with full lifecycle visibility:
+
+```scala
+import tausi.laminar.*
+import tausi.zio.ZStreamIO.given
+import com.raquo.laminar.api.L.*
+
+// Create a stream subscription for events
+val submissionStream = events.stream[SurveySubmittedEvent]
+
+// Convert to Laminar Signal with full lifecycle state
+val stateSignal: Signal[StreamState[EventMessage[SurveySubmittedEvent]]] =
+  submissionStream.toStateSignal
+
+// Render based on stream state with exhaustive pattern matching
+child <-- stateSignal.map {
+  case StreamState.Running =>
+    div("Listening for events...")
+  case StreamState.Value(msg) =>
+    div(s"Event received: ${msg.payload}")
+  case StreamState.Failed(err) =>
+    div(cls := "text-error", s"Error: ${err.message}")
+  case StreamState.Completed =>
+    div("Stream completed")
+  case StreamState.CompletedWith(last) =>
+    div(s"Final event: ${last.payload}")
+}
+```
+
+#### StreamState ADT
+
+The `StreamState` ADT provides visibility into all lifecycle phases:
+
+```scala
+enum StreamState[+A]:
+  case Running                         // Stream active, no values yet
+  case Value(value: A)                 // Latest value received
+  case Failed(error: TauriError)       // Stream terminated with error
+  case Completed                       // Stream completed (no final value)
+  case CompletedWith(value: A)         // Stream completed with final value
+```
+
+## Form Patterns
 
 ### Reactive State with Var/Signal
 
@@ -169,13 +155,15 @@ object QuestionType:
 final case class AppState(
   currentPage: Var[Page],
   contactDetails: Var[ContactDetails],
-  surveyAnswers: Var[Map[String, String]]
-):
-  def navigateNext(): Unit =
-    Page.next(currentPage.now()).foreach(navigateTo)
-    
-  def setAnswer(questionId: String, answer: String): Unit =
-    surveyAnswers.update(_ + (questionId -> answer))
+  surveyAnswers: Var[SurveyAnswers]
+)
+
+object AppState:
+  def initial: AppState = AppState(
+    currentPage = Var(Page.Welcome),
+    contactDetails = Var(ContactDetails.empty),
+    surveyAnswers = Var(SurveyAnswers.empty)
+  )
 ```
 
 ### Controlled Inputs
@@ -184,83 +172,66 @@ final case class AppState(
 input(
   controlled(
     value <-- valueSignal,
-    onInput.mapToValue --> { v => onValueChange(v) }
-  )
+    onInput.mapToValue --> valueVar.set
+  ),
+  onKeyDown --> { e =>
+    if e.key == "Enter" then handleSubmit()
+  }
 )
 ```
 
 ### Dynamic Children
 
 ```scala
+// Single child based on state
 div(
-  child <-- currentPage.signal.map { page =>
-    renderPage(page)
+  child <-- currentPage.signal.map(renderPage)
+)
+
+// List of children
+div(
+  children <-- featuresSignal.map { features =>
+    features.map(f => renderFeature(f))
   }
 )
 
+// Optional child
 div(
-  children <-- answersSignal.map { answers =>
-    answers.map(renderAnswer)
-  }
+  child.maybe <-- errorSignal.map(_.map(renderError))
 )
-
-div(
-  child.maybe <-- errorSignal.map {
-    case Some(err) => Some(errorComponent(err))
-    case None => None
-  }
-)
-```
-
-## Rust Backend
-
-The Rust backend implements the `save_survey` command:
-
-```rust
-#[tauri::command]
-fn save_survey(app: AppHandle, request: SaveSurveyRequest) -> Result<(), String> {
-    let submission = request.submission;
-    let surveys_dir = app.path().app_data_dir()?.join("surveys");
-    fs::create_dir_all(&surveys_dir)?;
-    
-    let filename = format!("survey_{}_{}.txt", 
-        submission.contact_details.last_name, 
-        chrono::Utc::now().format("%Y%m%d_%H%M%S")
-    );
-    
-    fs::write(surveys_dir.join(&filename), format_survey(&submission))?;
-    Ok(())
-}
-```
-
-### Survey File Location
-
-Submitted surveys are saved to the Tauri app data directory under a `surveys/` subdirectory:
-
-| Platform | Location |
-|----------|----------|
-| **Linux** | `~/.local/share/tausi.sample/surveys/` |
-| **macOS** | `~/Library/Application Support/tausi.sample/surveys/` |
-| **Windows** | `C:\Users\<User>\AppData\Roaming\tausi.sample\surveys\` |
-
-Files are named using the pattern: `survey_<lastname>_<timestamp>.txt`
-
-Example: `survey_smith_20251220_143052.txt`
-
-To view saved surveys on Linux:
-```bash
-ls -la ~/.local/share/tausi.sample/surveys/
-cat ~/.local/share/tausi.sample/surveys/survey_*.txt
 ```
 
 ## Running the Sample
 
+### Prerequisites
+
+- [Rust](https://www.rust-lang.org/tools/install) and Cargo
+- [Node.js](https://nodejs.org/) 18+
+- [sbt](https://www.scala-sbt.org/) 1.x
+
+### Development
+
 ```bash
-# Development
+# From project root
 cd modules/sample
 npm install
 npm run tauri dev
+```
 
-# Build
+The Scala.js code is compiled by Vite via the `scalaJSVite` plugin.
+
+### Production Build
+
+```bash
+cd modules/sample
 npm run tauri build
 ```
+
+## Project Dependencies
+
+| Dependency | Version | Purpose |
+|------------|---------|---------|
+| Laminar | 17.x | Reactive UI framework |
+| ZIO | 2.x | Effect system |
+| Tauri | 2.x | Desktop framework |
+| Vite | 6.x | Build tool |
