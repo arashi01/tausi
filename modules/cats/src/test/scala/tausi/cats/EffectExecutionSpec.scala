@@ -90,25 +90,25 @@ class EffectExecutionSpec extends CatsEffectSuite:
     yield assertEquals(result, "failure")
 
   // ====================
-  // runWith() (fire-and-forget) tests
+  // runWithUnsafe() (fire-and-forget) tests
   // ====================
 
-  dispatcherFixture.test("runWith() should complete successfully for successful effects"): dispatcher =>
+  dispatcherFixture.test("runWithUnsafe() should complete successfully for successful effects"): dispatcher =>
     given Dispatcher[IO] = dispatcher
     for
       ref <- Ref[IO].of(0)
       effect = ref.set(42)
-      _ = effect.runWith()
+      _ = effect.runWithUnsafe()
       _ <- IO.sleep(50.millis) // Allow async execution to complete
       result <- ref.get
     yield assertEquals(result, 42)
 
-  dispatcherFixture.test("runWith() should not throw on failure (errors silently dropped)"): dispatcher =>
+  dispatcherFixture.test("runWithUnsafe() should not throw on failure (errors silently dropped)"): dispatcher =>
     given Dispatcher[IO] = dispatcher
     for
       ref <- Ref[IO].of(false)
       effect: IO[Unit] = IO.raiseError[Unit](TestException("ignored")).guarantee(ref.set(true))
-      _ = effect.runWith()
+      _ = effect.runWithUnsafe()
       _ <- IO.sleep(50.millis) // Allow async execution to complete
       // Effect should have run (and failed), triggering guarantee
       executed <- ref.get

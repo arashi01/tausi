@@ -32,9 +32,7 @@ import _root_.cats.effect.std.Queue
 import _root_.fs2.Stream
 
 import tausi.api.EventMessage
-import tausi.api.codec.Decoder
-import tausi.api.codec.Encoder
-import tausi.api.{core as Core, event as CoreEvent, *}
+import tausi.api.{core as Core, events as CoreEvent, *}
 
 /** Cats Effect integration for Tausi.
   *
@@ -224,109 +222,146 @@ package object cats:
   // Event System
   // ====================
   object events:
-    def listen[T: Decoder](name: String, handler: EventMessage[T] => Unit): IO[EventHandle] =
-      listen(name, handler, EventOptions.default)
+    /** Register a persistent listener for an event with default options.
+      *
+      * The handler receives an Either containing either a decode error or the decoded event.
+      * This follows the errors-as-values principle.
+      *
+      * @param handler
+      *   Callback receiving Either decode error or decoded event message
+      * @param ev
+      *   The Event instance defining name and payload type
+      * @return
+      *   IO containing the event handle for unlistening
+      *
+      * @example
+      *   {{{
+      * import tausi.cats.*
+      * import myapp.events.AppEvents.{given, *}
+      *
+      * events.listen {
+      *   case Right(msg) => println(msg.payload)
+      *   case Left(err) => println(s"Decode error: ${err.message}")
+      * }
+      *   }}}
+      */
+    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+      ev: tausi.api.Event[A]
+    ): IO[EventHandle] =
+      listen(handler, EventOptions.default)
 
-    def listen[T: Decoder](name: String, handler: EventMessage[T] => Unit, options: EventOptions): IO[EventHandle] =
-      liftEventIO(CoreEvent.listen[T](name, handler, options))
+    /** Register a persistent listener with explicit options. */
+    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+      ev: tausi.api.Event[A]
+    ): IO[EventHandle] =
+      liftEventIO(CoreEvent.listen(handler, options))
 
-    def listen[T: Decoder](name: TauriEvent, handler: EventMessage[T] => Unit): IO[EventHandle] =
-      listen(name.value, handler)
+    /** Register a once-off listener with default options.
+      *
+      * The listener automatically unregisters after receiving the first event.
+      */
+    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+      ev: tausi.api.Event[A]
+    ): IO[EventHandle] =
+      once(handler, EventOptions.default)
 
-    def listen[T: Decoder](name: TauriEvent, handler: EventMessage[T] => Unit, options: EventOptions): IO[EventHandle] =
-      listen(name.value, handler, options)
+    /** Register a once-off listener with explicit options. */
+    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+      ev: tausi.api.Event[A]
+    ): IO[EventHandle] =
+      liftEventIO(CoreEvent.once(handler, options))
 
-    def once[T: Decoder](name: String, handler: EventMessage[T] => Unit): IO[EventHandle] =
-      once(name, handler, EventOptions.default)
+    /** Emit an event with a payload.
+      *
+      * The event name and encoder are resolved from the implicit [[tausi.api.Event]] instance.
+      *
+      * @param payload
+      *   The payload to emit
+      * @param ev
+      *   The Event instance defining name and payload type
+      * @return
+      *   IO completing when the event is emitted
+      *
+      * @example
+      *   {{{
+      * import tausi.cats.*
+      * import myapp.events.AppEvents.{given, *}
+      *
+      * events.emit(SurveySubmission("test data"))
+      *   }}}
+      */
+    def emit[A](payload: A)(using ev: tausi.api.Event[A]): IO[Unit] =
+      liftEventIO(CoreEvent.emit(payload))
 
-    def once[T: Decoder](name: String, handler: EventMessage[T] => Unit, options: EventOptions): IO[EventHandle] =
-      liftEventIO(CoreEvent.once[T](name, handler, options))
+    /** Emit an event to a specific target. */
+    def emitTo[A](target: EventTarget, payload: A)(using ev: tausi.api.Event[A]): IO[Unit] =
+      liftEventIO(CoreEvent.emitTo(target, payload))
 
-    def once[T: Decoder](name: TauriEvent, handler: EventMessage[T] => Unit): IO[EventHandle] =
-      once(name.value, handler)
+    /** Emit an event to a specific label. */
+    def emitTo[A](label: String, payload: A)(using ev: tausi.api.Event[A]): IO[Unit] =
+      liftEventIO(CoreEvent.emitTo(label, payload))
 
-    def once[T: Decoder](name: TauriEvent, handler: EventMessage[T] => Unit, options: EventOptions): IO[EventHandle] =
-      once(name.value, handler, options)
-
-    def emit(name: String): IO[Unit] =
-      liftEventIO(CoreEvent.emit(name))
-
-    def emit(name: TauriEvent): IO[Unit] = emit(name.value)
-
-    def emit[T: Encoder](name: String, payload: T): IO[Unit] =
-      liftEventIO(CoreEvent.emit[T](name, payload))
-
-    def emit[T: Encoder](name: TauriEvent, payload: T): IO[Unit] =
-      emit(name.value, payload)
-
-    def emitTo(target: EventTarget, name: String): IO[Unit] =
-      liftEventIO(CoreEvent.emitTo(target, name))
-
-    def emitTo(target: EventTarget, name: TauriEvent): IO[Unit] =
-      emitTo(target, name.value)
-
-    def emitTo(label: String, name: String): IO[Unit] =
-      liftEventIO(CoreEvent.emitTo(label, name))
-
-    def emitTo[T: Encoder](target: EventTarget, name: String, payload: T): IO[Unit] =
-      liftEventIO(CoreEvent.emitTo[T](target, name, payload))
-
-    def emitTo[T: Encoder](target: EventTarget, name: TauriEvent, payload: T): IO[Unit] =
-      emitTo(target, name.value, payload)
-
-    def emitTo[T: Encoder](label: String, name: String, payload: T): IO[Unit] =
-      liftEventIO(CoreEvent.emitTo[T](label, name, payload))
-
-    def emitTo[T: Encoder](label: String, name: TauriEvent, payload: T): IO[Unit] =
-      emitTo(label, name.value, payload)
-
+    /** Unlisten using a previously obtained handle. */
     def unlisten(handle: EventHandle): IO[Unit] =
       liftEventIO(CoreEvent.unlisten(handle))
 
-    def listenEval[T: Decoder](name: String)(handler: EventMessage[T] => IO[Unit])(using
-      dispatcher: Dispatcher[IO]): Resource[IO, EventHandle] =
-      listenEval(name, EventOptions.default)(handler)
+    /** Listen to events with effect-based handler. Returns a Resource that automatically unlistens
+      * when released.
+      *
+      * Decode errors from the event system are raised through the IO error channel.
+      */
+    def listenEval[A](handler: EventMessage[A] => IO[Unit])(using
+      ev: tausi.api.Event[A],
+      dispatcher: Dispatcher[IO]
+    ): Resource[IO, EventHandle] =
+      listenEval(handler, EventOptions.default)
 
-    def listenEval[T: Decoder](name: String, options: EventOptions)(
-      handler: EventMessage[T] => IO[Unit]
-    )(using dispatcher: Dispatcher[IO]): Resource[IO, EventHandle] =
-      listenWithCallback(name, options)(callbackFrom(handler))
+    /** Listen with effect-based handler and explicit options.
+      *
+      * Decode errors from the event system are raised through the IO error channel.
+      */
+    def listenEval[A](handler: EventMessage[A] => IO[Unit], options: EventOptions)(using
+      ev: tausi.api.Event[A],
+      dispatcher: Dispatcher[IO]
+    ): Resource[IO, EventHandle] =
+      managedHandle(listen(eitherCallbackFrom(handler), options))
 
-    def listenEval[T: Decoder](name: TauriEvent)(
-      handler: EventMessage[T] => IO[Unit]
-    )(using dispatcher: Dispatcher[IO]): Resource[IO, EventHandle] =
-      listenEval(name.value, EventOptions.default)(handler)
+    /** Create an fs2 Stream of events. The stream will emit events as they arrive and automatically
+      * unlisten when the stream is closed.
+      *
+      * Decode errors are raised through the stream's error channel.
+      *
+      * @example
+      *   {{{
+      * import tausi.cats.*
+      * import myapp.events.AppEvents.{given, *}
+      *
+      * val stream: Stream[IO, EventMessage[SurveySubmission]] =
+      *   events.stream[SurveySubmission]
+      *   }}}
+      */
+    def stream[A](using ev: tausi.api.Event[A], dispatcher: Dispatcher[IO]): Stream[IO, EventMessage[A]] =
+      stream(EventOptions.default)
 
-    def listenEval[T: Decoder](name: TauriEvent, options: EventOptions)(
-      handler: EventMessage[T] => IO[Unit]
-    )(using dispatcher: Dispatcher[IO]): Resource[IO, EventHandle] =
-      listenEval(name.value, options)(handler)
-
-    def stream[T: Decoder](name: String)(using Dispatcher[IO]): Stream[IO, EventMessage[T]] = stream(name, EventOptions.default)
-
-    def stream[T: Decoder](name: String, options: EventOptions)(using Dispatcher[IO]): Stream[IO, EventMessage[T]] =
+    /** Create an fs2 Stream with explicit options.
+      *
+      * Decode errors are raised through the stream's error channel.
+      */
+    def stream[A](options: EventOptions)(using
+      ev: tausi.api.Event[A],
+      dispatcher: Dispatcher[IO]
+    ): Stream[IO, EventMessage[A]] =
       Stream
         .resource {
           for
-            queue <- Resource.eval(Queue.unbounded[IO, EventMessage[T]])
-            _ <- listenEval(name, options)(event => queue.offer(event))
+            queue <- Resource.eval(Queue.unbounded[IO, Either[TauriError.EventError, EventMessage[A]]])
+            eitherHandler: (Either[TauriError.EventError, EventMessage[A]] => Unit) =
+              result => dispatcher.unsafeRunAndForget(queue.offer(result))
+            _ <- managedHandle(listen(eitherHandler, options))
           yield queue
         }
         .flatMap(queue => Stream.fromQueueUnterminated(queue))
-
-    def stream[T: Decoder](name: TauriEvent)(using
-      Dispatcher[IO]
-    ): Stream[IO, EventMessage[T]] = stream(name.value)
-
-    def stream[T: Decoder](name: TauriEvent, options: EventOptions)(using
-      Dispatcher[IO]
-    ): Stream[IO, EventMessage[T]] = stream(name.value, options)
-
-    private def listenWithCallback[T: Decoder](
-      name: String,
-      options: EventOptions
-    )(callback: EventMessage[T] => Unit): Resource[IO, EventHandle] =
-      managedHandle(listen(name, callback, options))
+        .evalMap(IO.fromEither)
 
     private def managedHandle(io: IO[EventHandle]): Resource[IO, EventHandle] =
       Resource.make(io)(releaseHandle)
@@ -334,8 +369,18 @@ package object cats:
     private def releaseHandle(handle: EventHandle): IO[Unit] =
       unlisten(handle)
 
-    private def callbackFrom[T](handler: EventMessage[T] => IO[Unit])(using dispatcher: Dispatcher[IO]): EventMessage[T] => Unit =
-      event => dispatcher.unsafeRunAndForget(handler(event))
+    /** Convert an effect-based handler to an Either-based callback.
+      *
+      * Errors in the Either (decode failures) are raised through the IO error channel.
+      */
+    private def eitherCallbackFrom[A](handler: EventMessage[A] => IO[Unit])(using
+      dispatcher: Dispatcher[IO]
+    ): Either[TauriError.EventError, EventMessage[A]] => Unit =
+      result =>
+        val effect = result match
+          case Right(event) => handler(event)
+          case Left(err)    => IO.raiseError(err)
+        dispatcher.unsafeRunAndForget(effect)
   end events
 
   private def liftEventIO[A](op: ExecutionContext ?=> Future[A]): IO[A] =
@@ -467,12 +512,15 @@ package object cats:
         }
       )
 
-    /** Execute the effect, ignoring the result.
+    /** Execute the effect, discarding both success and failure results.
       *
-      * '''Warning:''' Errors are silently dropped. Use the callback-accepting overloads for
-      * proper error handling.
+      * '''WARNING''': This is unsafe because errors are silently dropped. Use only when you
+      * explicitly don't care about the result or errors (e.g., fire-and-forget logging).
+      *
+      * Prefer `runWith(onResult)` or `runWith(onSuccess, onError)` for proper error handling.
       */
-    inline def runWith()(using dispatcher: Dispatcher[IO]): Unit =
+    inline def runWithUnsafe()(using dispatcher: Dispatcher[IO]): Unit =
       dispatcher.unsafeRunAndForget(effect.void.handleError(_ => ()))
+
   end extension
 end cats

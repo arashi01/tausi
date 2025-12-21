@@ -97,15 +97,16 @@ object PluginRegistry:
 
   /** Initialize all registered plugins.
     *
-    * Plugins are initialized in registration order. If a plugin fails to initialize, the error is
-    * logged but initialization continues for remaining plugins.
+    * Plugins are initialized in registration order. If any plugins fail to initialize, all errors
+    * are accumulated and returned. Successfully initialized plugins are marked as such regardless
+    * of failures in other plugins.
     *
     * This method is idempotent - plugins that are already initialized will be skipped.
     *
     * @param ec Execution context
-    * @return Future that completes when all plugins are initialized
+    * @return Future containing a list of plugin initialization errors (empty if all succeeded)
     */
-  def initializeAll(using ExecutionContext): Future[Unit] =
+  def initializeAll(using ExecutionContext): Future[List[TauriError.PluginError]] =
     val pluginsToInit = plugins.values.toList.filter(!_.initialized)
 
     Future
@@ -114,27 +115,28 @@ object PluginRegistry:
           entry.plugin.initialize
             .map { _ =>
               plugins.update(entry.name, entry.copy(initialized = true))
+              None
             }
             .recover { case e =>
-              // Log error but don't fail the whole initialization
-              Console.err.println(s"Failed to initialize plugin '${entry.name}': ${e.getMessage}")
+              Some(TauriError.PluginError(entry.name, s"Failed to initialize: ${e.getMessage}", Some(e)))
             }
         }
       }
-      .map(_ => ())
+      .map(_.flatten)
   end initializeAll
 
   /** Shutdown all registered plugins.
     *
-    * Plugins are shutdown in reverse registration order (LIFO). If a plugin fails to shutdown, the
-    * error is logged but shutdown continues for remaining plugins.
+    * Plugins are shutdown in reverse registration order (LIFO). If any plugins fail to shutdown,
+    * all errors are accumulated and returned. Successfully shutdown plugins are marked as such
+    * regardless of failures in other plugins.
     *
     * This method is idempotent - multiple calls are safe.
     *
     * @param ec Execution context
-    * @return Future that completes when all plugins are shutdown
+    * @return Future containing a list of plugin shutdown errors (empty if all succeeded)
     */
-  def shutdownAll(using ExecutionContext): Future[Unit] =
+  def shutdownAll(using ExecutionContext): Future[List[TauriError.PluginError]] =
     val pluginsToShutdown = plugins.values.toList.filter(_.initialized).reverse
 
     Future
@@ -143,14 +145,14 @@ object PluginRegistry:
           entry.plugin.shutdown
             .map { _ =>
               plugins.update(entry.name, entry.copy(initialized = false))
+              None
             }
             .recover { case e =>
-              // Log error but don't fail the whole shutdown
-              Console.err.println(s"Failed to shutdown plugin '${entry.name}': ${e.getMessage}")
+              Some(TauriError.PluginError(entry.name, s"Failed to shutdown: ${e.getMessage}", Some(e)))
             }
         }
       }
-      .map(_ => ())
+      .map(_.flatten)
   end shutdownAll
 
   /** Clear all registered plugins.

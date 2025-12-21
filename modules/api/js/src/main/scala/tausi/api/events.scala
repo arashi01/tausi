@@ -25,7 +25,6 @@ import scala.concurrent.Future
 import scala.scalajs.js
 
 import tausi.api.codec.Decoder
-import tausi.api.codec.Encoder
 import tausi.api.commands.event.Emit
 import tausi.api.commands.event.EmitTo
 import tausi.api.core.invoke
@@ -36,36 +35,46 @@ import tausi.api.core.invoke
   * payload types are coupled at the type level, ensuring compile-time verification that emit and
   * listen sites agree on payload types.
   *
+  * == Error Handling ==
+  *
+  * Decoding errors are represented as values via `Either[TauriError.EventError, EventMessage[A]]`.
+  * This follows the principle of errors-as-values and allows callers to handle decode failures
+  * explicitly.
+  *
+  * For convenience, unsafe variants are provided that take a separate `onError` callback.
+  *
   * @example
   *   {{{
   * import tausi.api.Event
-  * import tausi.api.event
+  * import tausi.api.events
   * import tausi.api.codec.Codec
   *
   * // Define event with payload type
   * final case class SurveySubmission(data: String) derives Codec
   * given surveySubmitted: Event[SurveySubmission] = Event.define("survey-submitted")
   *
-  * // Type-safe listen - payload type resolved from Event instance
-  * event.listen { msg => println(msg.payload.data) }
+  * // Type-safe listen with error handling
+  * events.listen {
+  *   case Right(msg) => println(msg.payload.data)
+  *   case Left(err) => println(s"Decode error: ${err.message}")
+  * }
   *
   * // Type-safe emit - payload type verified against Event instance
-  * event.emit(SurveySubmission("test"))
+  * events.emit(SurveySubmission("test"))
   *   }}}
   */
-object event:
-
+object events:
   // ============================================================
   // Type-Safe Event API (Event[A] based)
   // ============================================================
 
   /** Register a persistent listener for an event with default options.
     *
-    * The event type and decoder are resolved from the implicit [[Event]] instance, ensuring
-    * type-safe payload handling.
+    * The handler receives an Either to handle both successful decodes and decode failures.
+    * This follows the errors-as-values principle for proper error handling.
     *
     * @param handler
-    *   Callback to handle incoming events
+    *   Callback receiving Either decode error or decoded event message
     * @param ev
     *   The Event instance defining name and payload type
     * @return
@@ -75,19 +84,22 @@ object event:
     *   {{{
     * given surveySubmitted: Event[SurveySubmission] = Event.define("survey-submitted")
     *
-    * event.listen { msg => println(msg.payload) }
+    * events.listen {
+    *   case Right(msg) => println(msg.payload)
+    *   case Left(err) => println(s"Decode error: ${err.message}")
+    * }
     *   }}}
     */
-  def listen[A](handler: EventMessage[A] => Unit)(using
-      ev: Event[A],
-      ec: ExecutionContext
+  def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+    ev: Event[A],
+    ec: ExecutionContext
   ): Future[EventHandle] =
     listen(handler, EventOptions.default)
 
   /** Register a persistent listener with explicit options.
     *
     * @param handler
-    *   Callback to handle incoming events
+    *   Callback receiving Either decode error or decoded event message
     * @param options
     *   Event listening options (e.g., target filter)
     * @param ev
@@ -95,33 +107,34 @@ object event:
     * @return
     *   Future containing the event handle for unlistening
     */
-  def listen[A](handler: EventMessage[A] => Unit, options: EventOptions)(using
-      ev: Event[A],
-      ec: ExecutionContext
+  def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+    ev: Event[A],
+    ec: ExecutionContext
   ): Future[EventHandle] =
     registerListener(ev.name.value, handler, options, autoUnlisten = false)(using ec, ev.decoder)
 
   /** Register a once-off listener with default options.
     *
     * The listener automatically unregisters after receiving the first event.
+    * The handler receives an Either to handle both successful decodes and decode failures.
     *
     * @param handler
-    *   Callback to handle the single event
+    *   Callback receiving Either decode error or decoded event message
     * @param ev
     *   The Event instance defining name and payload type
     * @return
     *   Future containing the event handle
     */
-  def once[A](handler: EventMessage[A] => Unit)(using
-      ev: Event[A],
-      ec: ExecutionContext
+  def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+    ev: Event[A],
+    ec: ExecutionContext
   ): Future[EventHandle] =
     once(handler, EventOptions.default)
 
   /** Register a once-off listener with explicit options.
     *
     * @param handler
-    *   Callback to handle the single event
+    *   Callback receiving Either decode error or decoded event message
     * @param options
     *   Event listening options
     * @param ev
@@ -129,9 +142,9 @@ object event:
     * @return
     *   Future containing the event handle
     */
-  def once[A](handler: EventMessage[A] => Unit, options: EventOptions)(using
-      ev: Event[A],
-      ec: ExecutionContext
+  def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+    ev: Event[A],
+    ec: ExecutionContext
   ): Future[EventHandle] =
     registerListener(ev.name.value, handler, options, autoUnlisten = true)(using ec, ev.decoder)
 
@@ -154,8 +167,8 @@ object event:
     *   }}}
     */
   def emit[A](payload: A)(using
-      ev: Event[A],
-      ec: ExecutionContext
+    ev: Event[A],
+    ec: ExecutionContext
   ): Future[Unit] =
     invoke(Emit(ev.name, Some(ev.encoder.encode(payload))))
 
@@ -171,8 +184,8 @@ object event:
     *   Future completing when the event is emitted
     */
   def emitTo[A](target: EventTarget, payload: A)(using
-      ev: Event[A],
-      ec: ExecutionContext
+    ev: Event[A],
+    ec: ExecutionContext
   ): Future[Unit] =
     invoke(EmitTo(target, ev.name, Some(ev.encoder.encode(payload))))
 
@@ -188,8 +201,8 @@ object event:
     *   Future completing when the event is emitted
     */
   def emitTo[A](label: String, payload: A)(using
-      ev: Event[A],
-      ec: ExecutionContext
+    ev: Event[A],
+    ec: ExecutionContext
   ): Future[Unit] =
     invoke(EmitTo(EventTarget.AnyLabel(label), ev.name, Some(ev.encoder.encode(payload))))
 
@@ -208,11 +221,14 @@ object event:
   // ============================================================
 
   private def registerListener[T](
-      name: String,
-      handler: EventMessage[T] => Unit,
-      options: EventOptions,
-      autoUnlisten: Boolean
+    name: String,
+    handler: Either[TauriError.EventError, EventMessage[T]] => Unit,
+    options: EventOptions,
+    autoUnlisten: Boolean
   )(using ec: ExecutionContext, decoder: Decoder[T]): Future[EventHandle] =
+    import scala.util.Failure
+    import scala.util.Success
+
     import tausi.api.internal.TauriInternalsGlobal
 
     // scalafix:off
@@ -221,15 +237,22 @@ object event:
       val rawPayload = raw.selectDynamic("payload")
       val eventId = EventId.unsafe(raw.selectDynamic("id").asInstanceOf[Int])
       val eventName = raw.selectDynamic("event").asInstanceOf[String]
-      decoder.decode(rawPayload) match
+      val result: Either[TauriError.EventError, EventMessage[T]] = decoder.decode(rawPayload) match
         case Right(payload) =>
           val event: EventMessage[T] = EventMessage(eventName, eventId, payload)
           if autoUnlisten then
-            unlistenInternal(eventName, eventId, callbackId).onComplete(_ => ()): Unit
-          handler(event)
+            // Unlisten failure is a defect - the system is in an inconsistent state
+            // We throw to surface this as an unhandled exception rather than silently ignore
+            unlistenInternal(eventName, eventId, callbackId).onComplete {
+              case Failure(e) =>
+                throw TauriError.EventError(eventName, s"Failed to auto-unlisten: ${e.getMessage}", Some(e))
+              case Success(_) => ()
+            }
+          Right(event)
         case Left(err) =>
-          // Log decode error - in production might want structured error handling
-          scalajs.js.Dynamic.global.console.error(s"Failed to decode event payload for '$eventName': $err"): Unit
+          val errorMsg = s"Failed to decode event payload: $err"
+          Left(TauriError.EventError(eventName, errorMsg))
+      handler(result)
     // scalafix:on
     val rawId = TauriInternalsGlobal.transformCallback(jsHandler, false)
     callbackId = CallbackId.unsafe(rawId)
@@ -240,8 +263,8 @@ object event:
     val eventName = EventName.unsafe(name) // User-provided names validated at runtime by Tauri
 
     val args = js.Dictionary[Any](
-      "event"   -> eventName.value,
-      "target"  -> options.target.toJS,
+      "event" -> eventName.value,
+      "target" -> options.target.toJS,
       "handler" -> callbackId.toInt
     )
 
@@ -252,9 +275,9 @@ object event:
   end registerListener
 
   private def unlistenInternal(
-      name: String,
-      eventId: EventId,
-      callbackId: CallbackId
+    name: String,
+    eventId: EventId,
+    callbackId: CallbackId
   )(using ExecutionContext): Future[Unit] =
     import tausi.api.commands.event.Unlisten
     import tausi.api.internal.{EventPluginInternalsBridge, TauriInternalsGlobal}
@@ -266,4 +289,4 @@ object event:
     val eventName = EventName.unsafe(name)
     invoke(Unlisten(eventName, eventId))
   end unlistenInternal
-end event
+end events

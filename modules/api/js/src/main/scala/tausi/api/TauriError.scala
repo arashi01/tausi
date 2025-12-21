@@ -115,6 +115,18 @@ object TauriError:
     cause: Option[Throwable] = None
   ) extends TauriError(message, cause)
 
+  /** Error occurred during event operations.
+    *
+    * @param eventName The event name
+    * @param message Description of what went wrong
+    * @param cause Optional underlying exception
+    */
+  final case class EventError(
+    eventName: String,
+    message: String,
+    cause: Option[Throwable] = None
+  ) extends TauriError(message, cause)
+
   /** Generic error for cases not covered by specific error types.
     *
     * @param message Description of what went wrong
@@ -168,6 +180,11 @@ object TauriError:
     def apply(channelId: CallbackId, message: String): ChannelError =
       new ChannelError(channelId, message, None)
 
+  object EventError:
+    /** Create EventError without cause */
+    def apply(eventName: String, message: String): EventError =
+      new EventError(eventName, message, None)
+
   object GenericError:
     /** Create GenericError without cause */
     def apply(message: String): GenericError =
@@ -190,6 +207,7 @@ object TauriError:
       case e: ConversionError        => e.message
       case e: CallbackError          => e.message
       case e: ChannelError           => e.message
+      case e: EventError             => e.message
       case e: GenericError           => e.message
       case e: TauriNotAvailableError => e.message
 
@@ -202,6 +220,7 @@ object TauriError:
       case e: ConversionError        => e.cause
       case e: CallbackError          => e.cause
       case e: ChannelError           => e.cause
+      case e: EventError             => e.cause
       case e: GenericError           => e.cause
       case _: TauriNotAvailableError => None
   end extension
