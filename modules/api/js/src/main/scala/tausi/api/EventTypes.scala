@@ -154,7 +154,7 @@ object EventHandle:
 
   extension (handle: EventHandle)
     def unlisten()(using ExecutionContext): Future[Unit] =
-      tausi.api.event.unlisten(handle)
+      tausi.api.events.unlisten(handle)
 
 /** Tauri-provided event constants. */
 enum TauriEvent(val value: String):

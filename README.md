@@ -59,19 +59,35 @@ invoke(SetSize(
 
 ### Event Handling
 
-Events use opaque types for names and targets to prevent string-typing errors.
+Events use a type-safe `Event[A]` abstraction that couples event identity with payload type at the type level, following the same pattern as Commands.
 
 ```scala
-import tausi.api.event
-import tausi.api.EventName
+import tausi.api.Event
+import tausi.api.events
+import tausi.api.codec.Codec
+import scala.concurrent.ExecutionContext.Implicits.global
 
-// Listen to an event
-event.listen[String]("backend-message", msg => {
-  println(s"Received: ${msg.payload}")
-})
+// 1. Define event payload types
+final case class SurveySubmission(data: String) derives Codec
 
-// Emit an event
-event.emit("frontend-ready", "Hello from Scala.js")
+// 2. Define events as given instances
+given surveySubmitted: Event[SurveySubmission] = Event.define("survey-submitted")
+given backendReady: Event[Unit] = Event.define0("backend-ready")
+
+// 3. Listen - Event resolved implicitly, handler receives Either for error handling
+events.listen[SurveySubmission] {
+  case Right(msg) => println(s"Received: ${msg.payload.data}")
+  case Left(err)  => println(s"Decode error: ${err.message}")
+}
+
+// 4. Emit - payload type verified against Event instance
+events.emit(SurveySubmission("test data"))
+
+// 5. Listen once for Unit events
+events.once[Unit] {
+  case Right(_)  => println("Backend ready!")
+  case Left(err) => println(s"Error: ${err.message}")
+}
 ```
 
 ### Effect System Integration
@@ -132,8 +148,8 @@ myEffect.runWith {
   case Left(error) => handleError(error)
 }
 
-// Fire-and-forget (errors silently dropped)
-loggingEffect.runWith()
+// Fire-and-forget (errors silently dropped - use with caution)
+loggingEffect.runWithUnsafe()
 ```
 
 #### Cats Effect with Laminar
@@ -200,6 +216,69 @@ val simpleGreet: Command[String, String] = greet.contramapReq(name => Greet(name
 
 // Change command ID (useful for testing/mocking)
 val testGreet: Command[Greet, String] = greet.withCommandId("test_greet")
+```
+
+## Defining Custom Events
+
+For custom application events, define events using the `Event.define` factory:
+
+```scala
+import tausi.api.Event
+import tausi.api.codec.Codec
+
+// 1. Define Payload Type with Codec derivation
+final case class SurveyProgress(currentPage: Int, totalPages: Int) derives Codec
+
+// 2. Define Event using the factory method
+given surveyProgress: Event[SurveyProgress] = Event.define("survey-progress")
+
+// 3. Usage - listen
+events.listen[SurveyProgress] {
+  case Right(msg) => println(s"Page ${msg.payload.currentPage} of ${msg.payload.totalPages}")
+  case Left(err)  => println(s"Error: ${err.message}")
+}
+
+// 4. Usage - emit
+events.emit(SurveyProgress(2, 5))
+```
+
+### Events Without Payload
+
+For events that carry no data:
+
+```scala
+// Define a Unit event
+given backendReady: Event[Unit] = Event.define0("backend-ready")
+
+// Listen for it
+events.once[Unit] {
+  case Right(_)  => println("Backend is ready!")
+  case Left(err) => println(s"Error: ${err.message}")
+}
+
+// Emit it
+events.emit(())
+```
+
+### Event Transformations
+
+Events can be transformed to work with different payload types:
+
+```scala
+import tausi.api.Event
+
+// Transform payload type (bidirectional)
+val stringProgress: Event[String] = 
+  Event.mapPayload(surveyProgress)(
+    sp => s"${sp.currentPage}/${sp.totalPages}",
+    str => {
+      val parts = str.split("/")
+      SurveyProgress(parts(0).toInt, parts(1).toInt)
+    }
+  )
+
+// Change event name
+val renamedEvent: Event[SurveyProgress] = surveyProgress.withName("progress-update")
 ```
 
 ## Roadmap

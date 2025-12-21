@@ -85,7 +85,7 @@ final class Channel[T] private (initialHandler: T => Unit):
             // Process this message immediately
             val handler = messageHandler.get()
             handler(message)
-            val _ = nextMessageIndex.incrementAndGet()
+            nextMessageIndex.incrementAndGet(): Unit
 
             // Process any pending messages that are now in order
             // Using sparse array access - O(1) per message
@@ -98,7 +98,7 @@ final class Channel[T] private (initialHandler: T => Unit):
                 val currentHandler = messageHandler.get()
                 currentHandler(pendingMsg)
                 js.special.delete(pendingMessages, nextIdx.toString)
-                val _ = nextMessageIndex.incrementAndGet()
+                nextMessageIndex.incrementAndGet(): Unit
               else shouldContinue = false
             // scalafix:on
             // Check if we've reached the end

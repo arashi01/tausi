@@ -42,11 +42,8 @@ import tausi.api.EventTarget
 import tausi.api.Resource
 import tausi.api.ResourceId
 import tausi.api.TauriError
-import tausi.api.TauriEvent
-import tausi.api.codec.Decoder
-import tausi.api.codec.Encoder
 import tausi.api.core as Core
-import tausi.api.event as CoreEvent
+import tausi.api.events as CoreEvent
 
 /** ZIO integration for Tausi.
   *
@@ -165,127 +162,175 @@ package object zio:
   // Event System
   // ====================
 
-  type Event[T] = EventMessage[T]
-
   object events:
-    def listen[T: Decoder](name: String, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
-      listen(name, handler, EventOptions.default)
+    /** Register a persistent listener for an event with default options.
+      *
+      * The handler receives an Either containing either a decode error or the decoded event.
+      * This follows the errors-as-values principle.
+      *
+      * @param handler
+      *   Callback receiving Either decode error or decoded event message
+      * @param ev
+      *   The Event instance defining name and payload type
+      * @return
+      *   IO with TauriError in the error channel containing the event handle
+      *
+      * @example
+      *   {{{
+      * import tausi.zio.*
+      * import myapp.events.AppEvents.{given, *}
+      *
+      * events.listen {
+      *   case Right(msg) => println(msg.payload)
+      *   case Left(err) => println(s"Decode error: ${err.message}")
+      * }
+      *   }}}
+      */
+    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): IO[TauriError, EventHandle] =
+      listen(handler, EventOptions.default)
 
-    def listen[T: Decoder](name: String, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
-      liftEventIO(CoreEvent.listen[T](name, handler, options))
+    /** Register a persistent listener with explicit options. */
+    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): IO[TauriError, EventHandle] =
+      liftEventIO(CoreEvent.listen(handler, options))
 
-    def listen[T: Decoder](name: TauriEvent, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
-      listen(name.value, handler)
+    /** Register a once-off listener with default options.
+      *
+      * The listener automatically unregisters after receiving the first event.
+      */
+    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): IO[TauriError, EventHandle] =
+      once(handler, EventOptions.default)
 
-    def listen[T: Decoder](name: TauriEvent, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
-      listen(name.value, handler, options)
+    /** Register a once-off listener with explicit options. */
+    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): IO[TauriError, EventHandle] =
+      liftEventIO(CoreEvent.once(handler, options))
 
-    def once[T: Decoder](name: String, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
-      once(name, handler, EventOptions.default)
+    /** Emit an event with a payload.
+      *
+      * The event name and encoder are resolved from the implicit [[tausi.api.Event]] instance.
+      *
+      * @param payload
+      *   The payload to emit
+      * @param ev
+      *   The Event instance defining name and payload type
+      * @return
+      *   IO with TauriError in the error channel
+      *
+      * @example
+      *   {{{
+      * import tausi.zio.*
+      * import myapp.events.AppEvents.{given, *}
+      *
+      * events.emit(SurveySubmission("test data"))
+      *   }}}
+      */
+    def emit[A](payload: A)(using ev: tausi.api.Event[A], trace: Trace): IO[TauriError, Unit] =
+      liftEventIO(CoreEvent.emit(payload))
 
-    def once[T: Decoder](name: String, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
-      liftEventIO(CoreEvent.once[T](name, handler, options))
+    /** Emit an event to a specific target. */
+    def emitTo[A](target: EventTarget, payload: A)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): IO[TauriError, Unit] =
+      liftEventIO(CoreEvent.emitTo(target, payload))
 
-    def once[T: Decoder](name: TauriEvent, handler: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
-      once(name.value, handler)
+    /** Emit an event to a specific label. */
+    def emitTo[A](label: String, payload: A)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): IO[TauriError, Unit] =
+      liftEventIO(CoreEvent.emitTo(label, payload))
 
-    def once[T: Decoder](name: TauriEvent, handler: Event[T] => Unit, options: EventOptions)(using Trace): IO[TauriError, EventHandle] =
-      once(name.value, handler, options)
-
-    def emit(name: String)(using Trace): IO[TauriError, Unit] =
-      liftEventIO(CoreEvent.emit(name))
-
-    def emit(name: TauriEvent)(using Trace): IO[TauriError, Unit] =
-      emit(name.value)
-
-    def emit[T: Encoder](name: String, payload: T)(using Trace): IO[TauriError, Unit] =
-      liftEventIO(CoreEvent.emit[T](name, payload))
-
-    def emit[T: Encoder](name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
-      emit(name.value, payload)
-
-    def emitTo(target: EventTarget, name: String)(using Trace): IO[TauriError, Unit] =
-      liftEventIO(CoreEvent.emitTo(target, name))
-
-    def emitTo(target: EventTarget, name: TauriEvent)(using Trace): IO[TauriError, Unit] =
-      emitTo(target, name.value)
-
-    def emitTo(label: String, name: String)(using Trace): IO[TauriError, Unit] =
-      liftEventIO(CoreEvent.emitTo(label, name))
-
-    def emitTo(label: String, name: TauriEvent)(using Trace): IO[TauriError, Unit] =
-      emitTo(label, name.value)
-
-    def emitTo[T: Encoder](target: EventTarget, name: String, payload: T)(using Trace): IO[TauriError, Unit] =
-      liftEventIO(CoreEvent.emitTo[T](target, name, payload))
-
-    def emitTo[T: Encoder](target: EventTarget, name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
-      emitTo(target, name.value, payload)
-
-    def emitTo[T: Encoder](label: String, name: String, payload: T)(using Trace): IO[TauriError, Unit] =
-      liftEventIO(CoreEvent.emitTo[T](label, name, payload))
-
-    def emitTo[T: Encoder](label: String, name: TauriEvent, payload: T)(using Trace): IO[TauriError, Unit] =
-      emitTo(label, name.value, payload)
-
+    /** Unlisten using a previously obtained handle. */
     def unlisten(handle: EventHandle)(using Trace): IO[TauriError, Unit] =
       liftEventIO(CoreEvent.unlisten(handle))
 
     /** Listen to events with effect-based handler. Returns a scoped resource that automatically
       * unlistens when the scope closes.
+      *
+      * Decode errors from the event system are propagated through the handler's error channel.
       */
-    def listenScoped[T: Decoder](name: String)(
-      handler: Event[T] => IO[TauriError, Unit]
-    )(using Trace): ZIO[Scope, TauriError, EventHandle] =
-      listenScoped(name, EventOptions.default)(handler)
+    def listenScoped[A](handler: EventMessage[A] => IO[TauriError, Unit])(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): ZIO[Scope, TauriError, EventHandle] =
+      listenScoped(handler, EventOptions.default)
 
-    def listenScoped[T: Decoder](name: String, options: EventOptions)(
-      handler: Event[T] => IO[TauriError, Unit]
-    )(using Trace): ZIO[Scope, TauriError, EventHandle] =
+    /** Listen with effect-based handler and explicit options.
+      *
+      * Decode errors from the event system are propagated through the handler's error channel.
+      */
+    def listenScoped[A](handler: EventMessage[A] => IO[TauriError, Unit], options: EventOptions)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): ZIO[Scope, TauriError, EventHandle] =
       ZIO.acquireRelease(
-        listenWithCallback(name, options)(unsafeCallbackFrom(handler))
-      )(handle => unlisten(handle).ignore)
-
-    def listenScoped[T: Decoder](name: TauriEvent)(
-      handler: Event[T] => IO[TauriError, Unit]
-    )(using Trace): ZIO[Scope, TauriError, EventHandle] =
-      listenScoped(name.value, EventOptions.default)(handler)
-
-    def listenScoped[T: Decoder](name: TauriEvent, options: EventOptions)(
-      handler: Event[T] => IO[TauriError, Unit]
-    )(using Trace): ZIO[Scope, TauriError, EventHandle] =
-      listenScoped(name.value, options)(handler)
+        listen(eitherCallbackFrom(handler), options)
+      )(handle => unlisten(handle).orDie)
 
     /** Create a ZStream of events. The stream will emit events as they arrive and automatically
       * unlisten when the stream is closed.
+      *
+      * Decode errors are propagated through the stream's error channel.
+      *
+      * @example
+      *   {{{
+      * import tausi.zio.*
+      * import myapp.events.AppEvents.{given, *}
+      *
+      * val stream: ZStream[Any, TauriError, EventMessage[SurveySubmission]] =
+      *   events.stream[SurveySubmission]
+      *   }}}
       */
-    def stream[T: Decoder](name: String)(using Trace): ZStream[Any, TauriError, Event[T]] =
-      stream(name, EventOptions.default)
+    def stream[A](using ev: tausi.api.Event[A], trace: Trace): ZStream[Any, TauriError, EventMessage[A]] =
+      stream(EventOptions.default)
 
-    def stream[T: Decoder](name: String, options: EventOptions)(using Trace): ZStream[Any, TauriError, Event[T]] =
+    /** Create a ZStream with explicit options.
+      *
+      * Decode errors are propagated through the stream's error channel.
+      */
+    def stream[A](options: EventOptions)(using
+      ev: tausi.api.Event[A],
+      trace: Trace
+    ): ZStream[Any, TauriError, EventMessage[A]] =
       ZStream.scoped {
         for
-          queue <- ZIO.acquireRelease(Queue.unbounded[Event[T]])(_.shutdown)
-          _ <- listenScoped[T](name, options)((event: Event[T]) => queue.offer(event).unit)
-        yield ZStream.fromQueue(queue)
+          queue <- ZIO.acquireRelease(Queue.unbounded[Either[TauriError.EventError, EventMessage[A]]])(_.shutdown)
+          eitherHandler: (Either[TauriError.EventError, EventMessage[A]] => Unit) =
+            result =>
+              _root_.zio.Unsafe.unsafe { implicit unsafe =>
+                _root_.zio.Runtime.default.unsafe.run(queue.offer(result).unit).getOrThrowFiberFailure()
+              }
+          _ <- ZIO.acquireRelease(
+                 listen(eitherHandler, options)
+               )(handle => unlisten(handle).orDie)
+        yield ZStream.fromQueue(queue).mapZIO(ZIO.fromEither(_).mapError(identity))
       }.flatten
 
-    def stream[T: Decoder](name: TauriEvent)(using Trace): ZStream[Any, TauriError, Event[T]] =
-      stream(name.value)
-
-    def stream[T: Decoder](name: TauriEvent, options: EventOptions)(using Trace): ZStream[Any, TauriError, Event[T]] =
-      stream(name.value, options)
-
-    private def listenWithCallback[T: Decoder](
-      name: String,
-      options: EventOptions
-    )(callback: Event[T] => Unit)(using Trace): IO[TauriError, EventHandle] =
-      listen(name, callback, options)
-
-    private def unsafeCallbackFrom[T](handler: Event[T] => IO[TauriError, Unit]): Event[T] => Unit =
-      event =>
+    /** Convert an effect-based handler to an Either-based callback.
+      *
+      * Errors in the Either (decode failures) are propagated through the ZIO error channel.
+      */
+    private def eitherCallbackFrom[A](
+      handler: EventMessage[A] => IO[TauriError, Unit]
+    ): Either[TauriError.EventError, EventMessage[A]] => Unit =
+      result =>
         _root_.zio.Unsafe.unsafe { implicit unsafe =>
-          _root_.zio.Runtime.default.unsafe.run(handler(event)).getOrThrowFiberFailure()
+          val effect = result match
+            case Right(event) => handler(event)
+            case Left(err)    => ZIO.fail(err)
+          _root_.zio.Runtime.default.unsafe.run(effect).getOrThrowFiberFailure()
         }
   end events
 
@@ -422,12 +467,12 @@ package object zio:
       */
     inline def runWith(onResult: Either[E, A] => Unit)(using runtime: Runtime[Any], trace: Trace): Unit =
       Unsafe.unsafe { implicit unsafe =>
-        val _ = runtime.unsafe.fork(
+        runtime.unsafe.fork(
           effect.foldZIO(
             e => ZIO.succeed(onResult(Left(e))),
             a => ZIO.succeed(onResult(Right(a)))
           )
-        )
+        ): Unit
       }
 
     /** Execute the effect, invoking separate callbacks for success and failure.
@@ -441,22 +486,25 @@ package object zio:
       */
     inline def runWith(onSuccess: A => Unit, onError: E => Unit)(using runtime: Runtime[Any], trace: Trace): Unit =
       Unsafe.unsafe { implicit unsafe =>
-        val _ = runtime.unsafe.fork(
+        runtime.unsafe.fork(
           effect.foldZIO(
             e => ZIO.succeed(onError(e)),
             a => ZIO.succeed(onSuccess(a))
           )
-        )
+        ): Unit
       }
 
-    /** Execute the effect, ignoring the result.
+    /** Execute the effect, discarding both success and failure results.
       *
-      * '''Warning:''' Errors are silently dropped. Use the callback-accepting overloads for
-      * proper error handling.
+      * '''WARNING''': This is unsafe because errors are silently dropped. Use only when you
+      * explicitly don't care about the result or errors (e.g., fire-and-forget logging).
+      *
+      * Prefer `runWith(onResult)` or `runWith(onSuccess, onError)` for proper error handling.
       */
-    inline def runWith()(using runtime: Runtime[Any], trace: Trace): Unit =
+    inline def runWithUnsafe()(using runtime: Runtime[Any], trace: Trace): Unit =
       Unsafe.unsafe { implicit unsafe =>
-        val _ = runtime.unsafe.fork(effect.ignore)
+        runtime.unsafe.fork(effect.ignore): Unit
       }
+
   end extension
 end zio

@@ -73,8 +73,8 @@ result.runWith {
   case Left(err) => showError(err.message)
 }
 
-// Or fire-and-forget (errors silently dropped)
-result.runWith()
+// Or fire-and-forget (errors silently dropped - use with caution)
+result.runWithUnsafe()
 ```
 
 ### Defining Custom Commands
@@ -106,24 +106,36 @@ given customCommand: Command[MyRequest, MyResponse] =
 
 ### Event System (ZIO)
 
+Events use a type-safe `Event[A]` abstraction that couples event identity with payload type:
+
 ```scala
+import tausi.api.Event
+import tausi.api.codec.Codec
 import tausi.zio.events
 
-// Listen for events
-val handle: IO[TauriError, EventHandle] = events.listen[SurveyEvent](
-  "survey-event",
-  msg => handleEvent(msg.payload)
-)
+// 1. Define event payload types
+final case class SurveyEvent(eventType: String, data: String) derives Codec
 
-// Listen for single event
-val once: IO[TauriError, EventHandle] = events.once[String](
-  "backend-ready",
-  msg => println(s"Backend ready: ${msg.payload}")
-)
+// 2. Define events as given instances
+given surveyEvent: Event[SurveyEvent] = Event.define("survey-event")
+given backendReady: Event[String] = Event.define("backend-ready")
+given frontendReady: Event[Unit] = Event.define0("frontend-ready")
 
-// Emit events
-val emit: IO[TauriError, Unit] = events.emit("frontend-ready", ())
-val emitWithPayload: IO[TauriError, Unit] = events.emit("survey-event", payload)
+// 3. Listen for events - handler receives Either for error handling
+val handle: IO[TauriError, EventHandle] = events.listen[SurveyEvent] {
+  case Right(msg) => handleEvent(msg.payload)
+  case Left(err)  => println(s"Decode error: ${err.message}")
+}
+
+// 4. Listen for single event
+val once: IO[TauriError, EventHandle] = events.once[String] {
+  case Right(msg) => println(s"Backend ready: ${msg.payload}")
+  case Left(err)  => println(s"Error: ${err.message}")
+}
+
+// 5. Emit events - type verified against Event instance
+val emit: IO[TauriError, Unit] = events.emit(())  // Uses frontendReady
+val emitWithPayload: IO[TauriError, Unit] = events.emit(SurveyEvent("submit", "data"))
 ```
 
 ### Codec Derivation

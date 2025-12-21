@@ -95,23 +95,23 @@ class EffectExecutionSpec extends ZSuite:
     yield assertEquals(result, "failure")
 
   // ====================
-  // runWith() (fire-and-forget) tests
+  // runWithUnsafe() (fire-and-forget) tests
   // ====================
 
-  testZ("runWith() should complete successfully for successful effects"):
+  testZ("runWithUnsafe() should complete successfully for successful effects"):
     for
       ref <- Ref.make(0)
       effect = ref.set(42)
-      _ = effect.runWith()
+      _ = effect.runWithUnsafe()
       _ <- ZIO.sleep(50.millis) // Allow async execution to complete
       result <- ref.get
     yield assertEquals(result, 42)
 
-  testZ("runWith() should not throw on failure (errors silently dropped)"):
+  testZ("runWithUnsafe() should not throw on failure (errors silently dropped)"):
     for
       ref <- Ref.make(false)
       effect: IO[TestError, Unit] = ZIO.fail(TestError("ignored")).ensuring(ref.set(true))
-      _ = effect.runWith()
+      _ = effect.runWithUnsafe()
       _ <- ZIO.sleep(50.millis) // Allow async execution to complete
       // Effect should have run (and failed), triggering ensuring
       executed <- ref.get
