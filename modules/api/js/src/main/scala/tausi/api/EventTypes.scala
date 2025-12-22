@@ -61,14 +61,8 @@ object EventName:
 
   given CanEqual[EventName, EventName] = CanEqual.derived
 
-  // Codec instances for EventName
-  given Encoder[EventName] = (name: EventName) => name.value.asInstanceOf[js.Any] // scalafix:ok
-  given Decoder[EventName] = (value: js.Any) =>
-    val str = value.asInstanceOf[String] // scalafix:ok
-    EventName(str).left.map(_ => s"Invalid event name: $str")
-  given Codec[EventName] = new Codec[EventName]:
-    def encode(value: EventName): js.Any = summon[Encoder[EventName]].encode(value)
-    def decode(value: js.Any): Either[String, EventName] = summon[Decoder[EventName]].decode(value)
+  /** Codec instance for EventName using iemap for validation. */
+  given Codec[EventName] = Codec[String].iemap(EventName.apply)(_.value)
 end EventName
 
 /** Data describing a Tauri event emitted from the backend. */
@@ -82,14 +76,13 @@ opaque type EventId = Int
 
 object EventId:
   def unsafe(value: Int): EventId = value
+
   extension (id: EventId) def toInt: Int = id
+
   given CanEqual[EventId, EventId] = CanEqual.derived
 
-  given Encoder[EventId] = (id: EventId) => id.toInt.asInstanceOf[js.Any] // scalafix:ok
-  given Decoder[EventId] = (value: js.Any) => Right(EventId.unsafe(value.asInstanceOf[Int])) // scalafix:ok
-  given Codec[EventId] = new Codec[EventId]:
-    def encode(value: EventId): js.Any = summon[Encoder[EventId]].encode(value)
-    def decode(value: js.Any): Either[String, EventId] = summon[Decoder[EventId]].decode(value)
+  /** Codec instance for EventId using imap (no validation needed). */
+  given Codec[EventId] = Codec[Int].imap(EventId.unsafe)(_.toInt)
 
 /** Event targets recognised by Tauri. */
 enum EventTarget:

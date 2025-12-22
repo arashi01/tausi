@@ -494,4 +494,106 @@ class CodecSuite extends FunSuite:
     val error = result.left.getOrElse("")
     assert(error.contains("address"))
     assert(error.contains("city"))
+
+  // ====================
+  // Transformation Methods (Issue 1 - Part A)
+  // ====================
+
+  test("Encoder.contramap should transform input before encoding"):
+    val stringEncoder = Encoder[String]
+    val intToStringEncoder = stringEncoder.contramap[Int](_.toString)
+    val result = intToStringEncoder.encode(42)
+    assertEquals(result.asInstanceOf[String], "42")
+
+  test("Decoder.map should transform output after decoding"):
+    val intDecoder = Decoder[Int]
+    val stringDecoder = intDecoder.map(_.toString)
+    val result = stringDecoder.decode(42.asInstanceOf[js.Any])
+    assertEquals(result, Right("42"))
+
+  test("Decoder.emap should fail on validation error"):
+    val intDecoder = Decoder[Int]
+    val positiveDecoder = intDecoder.emap(n => if n > 0 then Right(n) else Left(s"Expected positive, got $n"))
+    assertEquals(positiveDecoder.decode(5.asInstanceOf[js.Any]), Right(5))
+    assert(positiveDecoder.decode((-1).asInstanceOf[js.Any]).isLeft)
+    assert(positiveDecoder.decode((-1).asInstanceOf[js.Any]).left.exists(_.contains("Expected positive")))
+
+  test("Decoder.emap should propagate base decoder errors"):
+    val intDecoder = Decoder[Int]
+    val positiveDecoder = intDecoder.emap(n => Right(n * 2))
+    val result = positiveDecoder.decode("not a number".asInstanceOf[js.Any])
+    assert(result.isLeft)
+    assert(result.left.exists(_.contains("Expected number")))
+
+  test("Codec.imap should roundtrip correctly"):
+    import CodecSuite.TestUserId
+    import CodecSuite.TestUserId.*
+    val userIdCodec = Codec[String].imap(TestUserId.apply)(_.value)
+    val original = TestUserId("user-123")
+    val encoded = userIdCodec.encode(original)
+    val decoded = userIdCodec.decode(encoded)
+    assertEquals(decoded.map(_.value), Right("user-123"))
+
+  test("Codec.iemap should validate during decode"):
+    import CodecSuite.TestPositiveInt
+    import CodecSuite.TestPositiveInt.*
+    val positiveCodec = Codec[Int].iemap(TestPositiveInt.from)(_.value)
+
+    // Valid value roundtrips
+    val encoded = positiveCodec.encode(TestPositiveInt.unsafe(42))
+    assertEquals(encoded.asInstanceOf[Int], 42)
+    assertEquals(positiveCodec.decode(encoded).map(_.value), Right(42))
+
+    // Invalid value fails decode
+    val invalidResult = positiveCodec.decode((-5).asInstanceOf[js.Any])
+    assert(invalidResult.isLeft)
+    assert(invalidResult.left.exists(_.contains("Expected positive")))
+
+  test("Codec.iemap should propagate base codec errors"):
+    val validated = Codec[Int].iemap(n => Right(n * 2))(n => n / 2)
+    val result = validated.decode("not a number".asInstanceOf[js.Any])
+    assert(result.isLeft)
+    assert(result.left.exists(_.contains("Expected number")))
+
+  test("Derived codec with opaque type field should work"):
+    import CodecSuite.TestTag
+    import CodecSuite.TestTag.*
+    import CodecSuite.TaggedItem
+    import CodecSuite.TaggedItem.given
+
+    val original = TaggedItem(1, TestTag("important"))
+    val encoded = Encoder[TaggedItem].encode(original)
+    val decoded = Decoder[TaggedItem].decode(encoded)
+    assertEquals(decoded.map(_.id), Right(1))
+    assertEquals(decoded.map(_.tag.value), Right("important"))
+end CodecSuite
+
+/** Test companion object for opaque types used in tests. */
+object CodecSuite:
+  /** Test opaque type for user IDs. */
+  opaque type TestUserId = String
+  object TestUserId:
+    def apply(id: String): TestUserId = id
+    extension (id: TestUserId) def value: String = id
+
+  /** Test opaque type for positive integers with validation. */
+  opaque type TestPositiveInt = Int
+  object TestPositiveInt:
+    def from(n: Int): Either[String, TestPositiveInt] =
+      if n > 0 then Right(n) else Left(s"Expected positive, got $n")
+    def unsafe(n: Int): TestPositiveInt = n
+    extension (n: TestPositiveInt) def value: Int = n
+
+  /** Test opaque type for tags. */
+  opaque type TestTag = String
+  object TestTag:
+    def apply(s: String): TestTag = s
+    extension (t: TestTag) def value: String = t
+    given Codec[TestTag] = Codec[String].imap(TestTag.apply)(_.value)
+
+  /** Case class using opaque type field. */
+  case class TaggedItem(id: Int, tag: TestTag)
+  object TaggedItem:
+    given CanEqual[TaggedItem, TaggedItem] = CanEqual.derived
+    given Codec[TaggedItem] = Codec.derived
 end CodecSuite

@@ -69,17 +69,13 @@ object ResourceId:
   /** Enable equality comparison for ResourceId */
   given CanEqual[ResourceId, ResourceId] = CanEqual.derived
 
-  /** Codec instance for ResourceId */
-  given codec.Codec[ResourceId] = codec.Codec.from(using
-    new codec.Encoder[ResourceId]:
-      def encode(id: ResourceId): scalajs.js.Any = id.toInt.asInstanceOf[scalajs.js.Any]
-    ,
-    new codec.Decoder[ResourceId]:
-      def decode(value: scalajs.js.Any): Either[String, ResourceId] =
-        value.asInstanceOf[Int] match
-          case n if n >= 0 => Right(unsafe(n))
-          case n           => Left(s"ResourceId must be non-negative, got: $n")
-  ) // scalafix:ok
+  /** Codec instance for ResourceId using iemap for validation. */
+  given codec.Codec[ResourceId] = codec
+    .Codec[Int]
+    .iemap { n =>
+      if n >= 0 then Right(unsafe(n))
+      else Left(s"ResourceId must be non-negative, got: $n")
+    }(_.toInt)
 
   extension (id: ResourceId)
     /** Convert ResourceId to its underlying integer value. */
