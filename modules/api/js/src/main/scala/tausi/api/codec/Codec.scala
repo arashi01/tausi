@@ -27,12 +27,23 @@ import scala.compiletime.summonInline
 import scala.deriving.*
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
+import scala.util.boundary
+import scala.util.boundary.break
 
 // scalafix:off DisableSyntax.asInstanceOf, DisableSyntax.null, DisableSyntax.while, DisableSyntax.throw, DisableSyntax.var
 
 // ===========================
 // Shared Derivation Helpers
 // ===========================
+
+// Get field labels as IArray for O(1) indexed access (computed once at derivation)
+private inline def getFieldLabelsArray[T <: Tuple]: IArray[String] =
+  IArray.from(getFieldLabelsList[T])
+
+private inline def getFieldLabelsList[T <: Tuple]: List[String] =
+  inline erasedValue[T] match
+    case _: EmptyTuple => Nil
+    case _: (t *: ts)  => constValue[t].asInstanceOf[String] :: getFieldLabelsList[ts]
 
 // Check if ADT children have fields (are case classes, not singletons)
 private transparent inline def hasFieldsInChildren[T <: Tuple]: Boolean =
@@ -80,17 +91,31 @@ private inline def ordinalToValue[A, T <: Tuple](ordinal: Int): A =
       if ordinal == 0 then summonInline[Mirror.ProductOf[t]].fromProduct(EmptyTuple).asInstanceOf[A]
       else ordinalToValue[A, ts](ordinal - 1)
 
-/** Encodes Scala values to JavaScript values for Tauri interoperability. */
+/** Encodes Scala values to JavaScript values for Tauri interoperability.
+  *
+  * Encoder is a contravariant functor - the type parameter appears in input position.
+  * Use `contramap` to adapt an existing encoder to work with a different input type.
+  *
+  * @example
+  *   {{{
+  * // Create encoder for opaque type via contramap
+  * opaque type UserId = String
+  * object UserId:
+  *   def apply(id: String): UserId = id
+  *   extension (id: UserId) def value: String = id
+  *   given Encoder[UserId] = Encoder[String].contramap(_.value)
+  *   }}}
+  */
 trait Encoder[A]:
   self =>
 
   /** Encode a Scala value to a JavaScript value. */
   def encode(value: A): js.Any
 
-  /** Create a new encoder that transforms input before encoding.
+  /** Create a new encoder that transforms input before encoding (contravariant functor).
     *
-    * @param f Function to transform the input type
-    * @return A new Encoder for type B
+    * @param f Function to extract the underlying value from B
+    * @return A new Encoder for type B that delegates to this encoder
     */
   def contramap[B](f: B => A): Encoder[B] =
     (value: B) => self.encode(f(value))
@@ -158,20 +183,24 @@ object Encoder:
       }
       dict.asInstanceOf[js.Any]
 
-  // Derivation support
-  private inline def summonAll[T <: Tuple]: List[Encoder[?]] =
+  // Derivation support - returns IArray for O(1) indexed access
+  private inline def summonAllArray[T <: Tuple]: IArray[Encoder[?]] =
+    IArray.from(summonAllList[T])
+
+  private inline def summonAllList[T <: Tuple]: List[Encoder[?]] =
     inline erasedValue[T] match
       case _: EmptyTuple => Nil
-      case _: (t *: ts)  => summonInline[Encoder[t]] :: summonAll[ts]
+      case _: (t *: ts)  => summonInline[Encoder[t]] :: summonAllList[ts]
 
   @nowarn inline def derived[A](using m: Mirror.Of[A]): Encoder[A] =
     inline m match
       case s: Mirror.SumOf[A] =>
+        // Hoist labels to derivation time (outside encode method)
+        val labels = getFieldLabelsArray[m.MirroredElemLabels]
+        val isSimpleEnum = !hasFieldsInChildren[m.MirroredElemTypes]
         new Encoder[A]: // Intentional inline instantiation for compile-time specialization
-          private val isSimpleEnum = !hasFieldsInChildren[m.MirroredElemTypes]
           def encode(value: A): js.Any =
             val ordinal = s.ordinal(value)
-            val labels = getFieldLabels[m.MirroredElemLabels]
             if isSimpleEnum then
               // Simple enum with no fields - encode as string
               labels(ordinal).asInstanceOf[js.Any]
@@ -183,12 +212,14 @@ object Encoder:
               obj("$value") = encoded
               obj.asInstanceOf[js.Any]
           end encode
+        end new
       case p: Mirror.ProductOf[A] =>
-        val encoders = summonAll[m.MirroredElemTypes]
+        // Hoist labels and encoders to derivation time (outside encode method)
+        val labels = getFieldLabelsArray[m.MirroredElemLabels]
+        val encoders = summonAllArray[m.MirroredElemTypes]
         new Encoder[A]: // Intentional inline instantiation for compile-time specialization
           def encode(value: A): js.Any =
             val product = value.asInstanceOf[Product]
-            val labels = getFieldLabels[m.MirroredElemLabels]
             val obj = js.Dictionary.empty[js.Any]
             var i = 0
             while i < encoders.length do
@@ -196,15 +227,30 @@ object Encoder:
               i += 1
             obj.asInstanceOf[js.Any]
 
-  private inline def getFieldLabels[T <: Tuple]: List[String] =
-    inline erasedValue[T] match
-      case _: EmptyTuple => Nil
-      case _: (t *: ts)  => constValue[t].asInstanceOf[String] :: getFieldLabels[ts]
-
   extension [A](value: A) def toJS(using enc: Encoder[A]): js.Any = enc.encode(value)
 end Encoder
 
-/** Decodes JavaScript values to Scala values for Tauri interoperability. */
+/** Decodes JavaScript values to Scala values for Tauri interoperability.
+  *
+  * Decoder is a covariant functor - the type parameter appears in output position.
+  * Use `map` for infallible transformations and `emap` for fallible ones.
+  *
+  * @example
+  *   {{{
+  * // Create decoder for opaque type via map
+  * opaque type UserId = String
+  * object UserId:
+  *   def apply(id: String): UserId = id
+  *   given Decoder[UserId] = Decoder[String].map(UserId.apply)
+  *
+  * // Create decoder with validation via emap
+  * opaque type PositiveInt = Int
+  * object PositiveInt:
+  *   def from(n: Int): Either[String, PositiveInt] =
+  *     if n > 0 then Right(n) else Left(s"Expected positive, got $n")
+  *   given Decoder[PositiveInt] = Decoder[Int].emap(PositiveInt.from)
+  *   }}}
+  */
 trait Decoder[A]:
   self =>
 
@@ -214,13 +260,26 @@ trait Decoder[A]:
     */
   def decode(value: js.Any): Either[String, A]
 
-  /** Create a new decoder that transforms output after decoding.
+  /** Create a new decoder that transforms output after decoding (covariant functor).
+    *
+    * Use this for infallible transformations where the conversion always succeeds.
     *
     * @param f Function to transform the decoded value
     * @return A new Decoder for type B
     */
   def map[B](f: A => B): Decoder[B] =
     (value: js.Any) => self.decode(value).map(f)
+
+  /** Create a new decoder with fallible transformation (effectful map).
+    *
+    * Use this when the transformation may fail with a validation error.
+    * The error message from `f` will be used as the decode error.
+    *
+    * @param f Function to validate and transform the decoded value
+    * @return A new Decoder for type B
+    */
+  def emap[B](f: A => Either[String, B]): Decoder[B] =
+    (value: js.Any) => self.decode(value).flatMap(f)
 end Decoder
 
 object Decoder:
@@ -328,19 +387,23 @@ object Decoder:
       else Left(s"Expected object, got ${js.typeOf(value)}")
   end given
 
-  // Derivation support
-  private inline def summonAll[T <: Tuple]: List[Decoder[?]] =
+  // Derivation support - returns IArray for O(1) indexed access
+  private inline def summonAllArray[T <: Tuple]: IArray[Decoder[?]] =
+    IArray.from(summonAllList[T])
+
+  private inline def summonAllList[T <: Tuple]: List[Decoder[?]] =
     inline erasedValue[T] match
       case _: EmptyTuple => Nil
-      case _: (t *: ts)  => summonInline[Decoder[t]] :: summonAll[ts]
+      case _: (t *: ts)  => summonInline[Decoder[t]] :: summonAllList[ts]
 
   @nowarn inline def derived[A](using m: Mirror.Of[A]): Decoder[A] =
     inline m match
       case s: Mirror.SumOf[A] =>
+        // Hoist labels to derivation time (outside decode method)
+        val labels = getFieldLabelsArray[m.MirroredElemLabels]
+        val isSimpleEnum = !hasFieldsInChildren[m.MirroredElemTypes]
         new Decoder[A]: // Intentional inline instantiation for compile-time specialization
-          private val isSimpleEnum = !hasFieldsInChildren[m.MirroredElemTypes]
           def decode(value: js.Any): Either[String, A] =
-            val labels = getFieldLabels[m.MirroredElemLabels]
             if isSimpleEnum then
               // Simple enum with singleton cases - decode from string
               if js.typeOf(value) == "string" then
@@ -366,44 +429,89 @@ object Decoder:
               else Left(s"Expected object for ADT, got ${js.typeOf(value)}")
             end if
           end decode
+        end new
       case p: Mirror.ProductOf[A] =>
-        val decoders = summonAll[m.MirroredElemTypes]
+        // Hoist labels and decoders to derivation time (outside decode method)
+        val labels = getFieldLabelsArray[m.MirroredElemLabels]
+        val decoders = summonAllArray[m.MirroredElemTypes]
+        val fieldCount = labels.length
         new Decoder[A]: // Intentional inline instantiation for compile-time specialization
           def decode(value: js.Any): Either[String, A] =
             if js.typeOf(value) != "object" || value == null then Left(s"Expected object, got ${js.typeOf(value)}")
             else
               val obj = value.asInstanceOf[js.Dictionary[js.Any]]
-              val labels = getFieldLabels[m.MirroredElemLabels]
-
-              labels
-                .zip(decoders)
-                .foldLeft[Either[String, List[Any]]](Right(Nil)) { case (acc, (label, decoder)) =>
-                  acc.flatMap { list =>
-                    val fieldValue = obj.get(label).getOrElse(js.undefined)
-                    decoder
-                      .asInstanceOf[Decoder[Any]]
-                      .decode(fieldValue)
-                      .map(a => list :+ a)
-                      .left
-                      .map(err => s"Field '$label': $err")
-                  }
-                }
-                .map(fields => p.fromProduct(Tuple.fromArray(fields.toArray)))
+              // Use boundary/break for structured early exit with indexed iteration
+              boundary:
+                val arr = new Array[Any](fieldCount)
+                var i = 0
+                while i < fieldCount do
+                  val label = labels(i)
+                  val fieldValue = obj.get(label).getOrElse(js.undefined)
+                  decoders(i).asInstanceOf[Decoder[Any]].decode(fieldValue) match
+                    case Right(v) => arr(i) = v
+                    case Left(e)  => break(Left(s"Field '$label': $e"))
+                  i += 1
+                Right(p.fromProduct(Tuple.fromArray(arr)))
         end new
-
-  private inline def getFieldLabels[T <: Tuple]: List[String] =
-    inline erasedValue[T] match
-      case _: EmptyTuple => Nil
-      case _: (t *: ts)  => constValue[t].asInstanceOf[String] :: getFieldLabels[ts]
 
   extension (value: js.Any) def fromJS[A](using dec: Decoder[A]): Either[String, A] = dec.decode(value)
 end Decoder
 
-/** Combined encoder and decoder.
+/** Combined encoder and decoder for bidirectional JavaScript/Scala conversions.
   *
-  * Useful for bidirectional conversions.
+  * Codec is an invariant functor - the type parameter appears in both input and output positions.
+  * Use `imap` for bidirectional transformations and `iemap` when decoding may fail.
+  *
+  * @example
+  *   {{{
+  * // Simple opaque type wrapping
+  * opaque type UserId = String
+  * object UserId:
+  *   def apply(id: String): UserId = id
+  *   extension (id: UserId) def value: String = id
+  *   given Codec[UserId] = Codec[String].imap(UserId.apply)(_.value)
+  *
+  * // Validated opaque type with decode-time validation
+  * opaque type PositiveInt = Int
+  * object PositiveInt:
+  *   def from(n: Int): Either[String, PositiveInt] =
+  *     if n > 0 then Right(n) else Left(s"Expected positive, got $n")
+  *   def unsafe(n: Int): PositiveInt = n
+  *   extension (n: PositiveInt) def value: Int = n
+  *   given Codec[PositiveInt] = Codec[Int].iemap(PositiveInt.from)(_.value)
+  *   }}}
   */
-trait Codec[A] extends Encoder[A], Decoder[A]
+trait Codec[A] extends Encoder[A], Decoder[A]:
+  self =>
+
+  /** Bidirectional transformation for invariant mapping.
+    *
+    * Use this for opaque types and other simple wrappers where both
+    * conversion directions are infallible.
+    *
+    * @param f Function to construct B from A (used in decoding)
+    * @param g Function to extract A from B (used in encoding)
+    * @return A new Codec for type B
+    */
+  def imap[B](f: A => B)(g: B => A): Codec[B] =
+    new Codec[B]:
+      def encode(value: B): js.Any = self.encode(g(value))
+      def decode(value: js.Any): Either[String, B] = self.decode(value).map(f)
+
+  /** Bidirectional transformation with fallible decoding.
+    *
+    * Use this for validated opaque types where the conversion from the
+    * underlying type may fail validation.
+    *
+    * @param f Function to validate and construct B from A (used in decoding)
+    * @param g Function to extract A from B (used in encoding)
+    * @return A new Codec for type B
+    */
+  def iemap[B](f: A => Either[String, B])(g: B => A): Codec[B] =
+    new Codec[B]:
+      def encode(value: B): js.Any = self.encode(g(value))
+      def decode(value: js.Any): Either[String, B] = self.decode(value).flatMap(f)
+end Codec
 
 object Codec:
 

@@ -23,7 +23,6 @@ package tausi.api
 import munit.FunSuite
 
 class CoreApiSuite extends FunSuite:
-  // scalafix:off
   test("core.isTauri should return false in non-browser environment"):
     // In Node.js test environment, window doesn't exist so isTauri returns false
     // In actual Tauri environment, this would return true

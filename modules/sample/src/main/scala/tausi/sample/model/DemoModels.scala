@@ -13,6 +13,53 @@ import tausi.api.codec.Codec
   */
 
 // =============================================================================
+// Opaque Type Examples (demonstrating Codec.imap/iemap patterns)
+// =============================================================================
+
+/** Type-safe email address with validation.
+  *
+  * Demonstrates `Codec.iemap` for opaque types with decode-time validation.
+  */
+opaque type Email = String
+
+object Email:
+  /** Smart constructor with validation. */
+  def apply(value: String): Either[String, Email] =
+    if value.contains("@") && value.length >= 3 then Right(value)
+    else Left(s"Invalid email format: $value")
+
+  /** Unsafe constructor for known-valid emails. */
+  def unsafe(value: String): Email = value
+
+  extension (email: Email)
+    /** Get the raw email string. */
+    def value: String = email
+
+  given CanEqual[Email, Email] = CanEqual.derived
+
+  /** Codec using iemap for validation during decode. */
+  given Codec[Email] = Codec[String].iemap(Email.apply)(_.value)
+end Email
+
+/** Type-safe survey identifier.
+  *
+  * Demonstrates `Codec.imap` for simple opaque type wrapping.
+  */
+opaque type SurveyId = String
+
+object SurveyId:
+  def apply(id: String): SurveyId = id
+
+  extension (id: SurveyId)
+    def value: String = id
+
+  given CanEqual[SurveyId, SurveyId] = CanEqual.derived
+
+  /** Codec using imap for simple bidirectional transformation. */
+  given Codec[SurveyId] = Codec[String].imap(SurveyId.apply)(_.value)
+end SurveyId
+
+// =============================================================================
 // Core Domain Models
 // =============================================================================
 

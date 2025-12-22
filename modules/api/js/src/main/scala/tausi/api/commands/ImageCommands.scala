@@ -55,7 +55,8 @@ object image extends ImageCommandsGenerated:
         (0 until data.length).foreach(i => arr(i) = data(i).toByte)
         arr
 
-    given Codec[RgbaData] = Codec[Uint8Array].asInstanceOf[Codec[RgbaData]] // scalafix:ok
+    given CanEqual[RgbaData, RgbaData] = CanEqual.derived
+    given Codec[RgbaData] = Codec[Uint8Array].imap(RgbaData.apply)(_.bytes)
   end RgbaData
 
   /** Image dimensions */
