@@ -22,49 +22,49 @@ package tausi.api
 
 import munit.FunSuite
 
-class TauriErrorSuite extends FunSuite:
+class TausiErrorSuite extends FunSuite:
 
-  test("TauriError hierarchy should be sealed"):
-    val error: TauriError = TauriError.GenericError("test")
-    assert(error.isInstanceOf[TauriError]) // scalafix:ok
+  test("TausiError hierarchy should be sealed"):
+    val error: TausiError = TausiError.GenericError("test")
+    assert(error.isInstanceOf[TausiError]) // scalafix:ok
 
   test("InvokeError should contain command information"):
-    val error = TauriError.InvokeError("my-command", "failed", None)
+    val error = TausiError.InvokeError("my-command", "failed", None)
     assertEquals(error.command, "my-command")
     assertEquals(error.message, "failed")
     assertEquals(error.cause, None)
 
   test("PluginError should contain plugin information"):
-    val error = TauriError.PluginError("my-plugin", "initialization failed", None)
+    val error = TausiError.PluginError("my-plugin", "initialization failed", None)
     assertEquals(error.plugin, "my-plugin")
     assertEquals(error.message, "initialization failed")
 
   test("ResourceError should contain resource ID"):
     val rid = ResourceId.unsafe(42)
-    val error = TauriError.ResourceError.apply(rid, "cleanup failed", None)
+    val error = TausiError.ResourceError.apply(rid, "cleanup failed", None)
     assertEquals(error.resourceId, rid)
     assertEquals(error.message, "cleanup failed")
 
   test("ConversionError should contain file path and protocol"):
-    val error = TauriError.ConversionError("/path/to/file", "asset", "invalid path", None)
+    val error = TausiError.ConversionError("/path/to/file", "asset", "invalid path", None)
     assertEquals(error.filePath, "/path/to/file")
     assertEquals(error.protocol, "asset")
 
   test("TauriNotAvailableError should have message"):
-    val error = TauriError.TauriNotAvailableError.apply("Tauri runtime is not available")
+    val error = TausiError.TauriNotAvailableError.apply("Tauri runtime is not available")
     assert(error.message.contains("Tauri runtime is not available"))
 
-  test("fromThrowable should wrap non-TauriError"):
+  test("fromThrowable should wrap non-TausiError"):
     val ex = new RuntimeException("oops")
-    val error = TauriError.fromThrowable(ex)
-    assert(error.isInstanceOf[TauriError.GenericError]) // scalafix:ok
+    val error = TausiError.fromThrowable(ex)
+    assert(error.isInstanceOf[TausiError.GenericError]) // scalafix:ok
     assertEquals(error.cause, Some(ex))
 
-  test("fromThrowable should preserve TauriError"):
-    val original = TauriError.GenericError("test", None)
-    val result = TauriError.fromThrowable(original)
+  test("fromThrowable should preserve TausiError"):
+    val original = TausiError.GenericError("test", None)
+    val result = TausiError.fromThrowable(original)
     assertEquals(result, original)
-end TauriErrorSuite
+end TausiErrorSuite
 
 class TypesSuite extends FunSuite:
 

@@ -20,7 +20,7 @@
  */
 package tausi.api.stream
 
-import tausi.api.TauriError
+import tausi.api.TausiError
 
 /** Type class for subscribing to effect streams via callbacks.
   *
@@ -32,10 +32,10 @@ import tausi.api.TauriError
   * observables without buffering or complex synchronisation.
   *
   * ==Type Parameters==
-  *   - `S[_]`: The stream type constructor (e.g., `ZStream[Any, TauriError, *]` or `Stream[IO, *]`)
+  *   - `S[_]`: The stream type constructor (e.g., `ZStream[Any, TausiError, *]` or `Stream[IO, *]`)
   *
   * ==Error Handling==
-  * All errors are normalised to [[TauriError]] variants, ensuring consistent error handling
+  * All errors are normalised to [[TausiError]] variants, ensuring consistent error handling
   * across effect systems. This follows the errors-as-values principle - errors are never
   * thrown or silently dropped.
   *
@@ -63,19 +63,19 @@ trait StreamSource[S[_]]:
       * The subscription begins immediately upon calling this method. Elements are delivered via
       * `onNext`, and the stream terminates with either `onError` or `onComplete` (never both).
       *
-      * All errors are normalised to [[TauriError]] variants, ensuring consistent error handling
-      * across effect systems. Upstream errors are wrapped in [[TauriError.StreamError]].
+      * All errors are normalised to [[TausiError]] variants, ensuring consistent error handling
+      * across effect systems. Upstream errors are wrapped in [[TausiError.StreamError]].
       *
       * @param onNext
       *   Callback invoked for each element emitted by the stream
       * @param onError
-      *   Callback invoked if the stream fails with a [[TauriError]] (terminal)
+      *   Callback invoked if the stream fails with a [[TausiError]] (terminal)
       * @param onComplete
       *   Callback invoked when the stream completes successfully (terminal)
       * @return
       *   A [[StreamSubscription]] that can be used to cancel the subscription
       */
-    def subscribe(onNext: A => Unit, onError: TauriError => Unit, onComplete: () => Unit): StreamSubscription
+    def subscribe(onNext: A => Unit, onError: TausiError => Unit, onComplete: () => Unit): StreamSubscription
   end extension
 
 end StreamSource

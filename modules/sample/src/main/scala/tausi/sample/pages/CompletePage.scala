@@ -20,7 +20,7 @@ import tausi.zio.*
   * This page demonstrates the key Tausi patterns:
   *   - Command invocation with `invoke(request).runWith(...)`
   *   - Event emission for notifications
-  *   - Error handling with TauriError
+  *   - Error handling with TausiError
   *   - Loading state management
   */
 object CompletePage:

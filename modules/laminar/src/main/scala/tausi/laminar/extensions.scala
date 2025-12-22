@@ -27,7 +27,7 @@ import com.raquo.airstream.ownership.Owner
 import com.raquo.airstream.ownership.Subscription
 import com.raquo.airstream.state.Var
 
-import tausi.api.TauriError
+import tausi.api.TausiError
 import tausi.api.stream.StreamSource
 import tausi.api.stream.StreamSubscription
 
@@ -130,7 +130,7 @@ extension [S[_]: StreamSource, A](stream: S[A])
     * import tausi.zio.ZStreamIO.given
     *
     * // Use Left as loading indicator
-    * val signal = myStream.toSignal(Left(TauriError.StreamError("Loading...")))
+    * val signal = myStream.toSignal(Left(TausiError.StreamError("Loading...")))
     *
     * div(
     *   child <-- signal.map {
@@ -140,7 +140,7 @@ extension [S[_]: StreamSource, A](stream: S[A])
     * )
     *   }}}
     */
-  def toSignal(initial: Either[TauriError, A])(using owner: Owner): Signal[Either[TauriError, A]] =
+  def toSignal(initial: Either[TausiError, A])(using owner: Owner): Signal[Either[TausiError, A]] =
     val variable = Var(initial)
     val subscription = stream.subscribe(
       onNext = a => variable.set(Right(a)),
@@ -167,7 +167,7 @@ extension [S[_]: StreamSource, A](stream: S[A])
     * import tausi.laminar.*
     * import tausi.zio.ZStreamIO.given
     *
-    * val errorVar = Var[Option[TauriError]](None)
+    * val errorVar = Var[Option[TausiError]](None)
     * val signal = myStream.toSignal(err => errorVar.set(Some(err)))
     *
     * div(
@@ -176,7 +176,7 @@ extension [S[_]: StreamSource, A](stream: S[A])
     * )
     *   }}}
     */
-  def toSignal(onError: TauriError => Unit)(using owner: Owner): Signal[Option[A]] =
+  def toSignal(onError: TausiError => Unit)(using owner: Owner): Signal[Option[A]] =
     val variable = Var[Option[A]](None)
     val subscription = stream.subscribe(
       onNext = a => variable.set(Some(a)),

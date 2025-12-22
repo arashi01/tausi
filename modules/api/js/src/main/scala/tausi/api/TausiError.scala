@@ -24,13 +24,13 @@ import scala.scalajs.js
 import scala.util.control.NoStackTrace
 
 /** The root error type for all Tauri-related errors. */
-sealed abstract class TauriError(message: String, cause: Option[Throwable])
+sealed abstract class TausiError(message: String, cause: Option[Throwable])
     extends Throwable(message, cause.getOrElse(null.asInstanceOf[Throwable]))
     with NoStackTrace
     with Product
     with Serializable // scalafix:ok
 
-object TauriError:
+object TausiError:
   /** Error occurred during command invocation.
     *
     * @param command The command name that was invoked
@@ -41,7 +41,7 @@ object TauriError:
     command: String,
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during plugin operations.
     *
@@ -53,7 +53,7 @@ object TauriError:
     plugin: String,
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during permission operations.
     *
@@ -63,7 +63,7 @@ object TauriError:
   final case class PermissionError(
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during resource management.
     *
@@ -75,7 +75,7 @@ object TauriError:
     resourceId: ResourceId,
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during file path conversion.
     *
@@ -89,7 +89,7 @@ object TauriError:
     protocol: String,
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during callback operations.
     *
@@ -101,7 +101,7 @@ object TauriError:
     callbackId: CallbackId,
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during channel operations.
     *
@@ -113,7 +113,7 @@ object TauriError:
     channelId: CallbackId,
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during stream operations.
     *
@@ -123,7 +123,7 @@ object TauriError:
   final case class StreamError(
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error occurred during event operations.
     *
@@ -135,7 +135,7 @@ object TauriError:
     eventName: String,
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Generic error for cases not covered by specific error types.
     *
@@ -145,7 +145,7 @@ object TauriError:
   final case class GenericError(
     message: String,
     cause: Option[Throwable] = None
-  ) extends TauriError(message, cause)
+  ) extends TausiError(message, cause)
 
   /** Error indicating Tauri runtime is not available.
     *
@@ -153,7 +153,7 @@ object TauriError:
     *
     * @param message Description of what went wrong
     */
-  final case class TauriNotAvailableError(message: String) extends TauriError(message, None)
+  final case class TauriNotAvailableError(message: String) extends TausiError(message, None)
 
   object InvokeError:
     /** Create InvokeError without cause */
@@ -212,8 +212,8 @@ object TauriError:
         "Tauri runtime is not available. Ensure this code runs within a Tauri application."
       )
 
-  extension (error: TauriError)
-    /** Extract human-readable error message from any TauriError variant. */
+  extension (error: TausiError)
+    /** Extract human-readable error message from any TausiError variant. */
     inline def message: String = error match
       case e: InvokeError            => e.message
       case e: PluginError            => e.message
@@ -227,7 +227,7 @@ object TauriError:
       case e: GenericError           => e.message
       case e: TauriNotAvailableError => e.message
 
-    /** Extract optional underlying cause from any TauriError variant. */
+    /** Extract optional underlying cause from any TausiError variant. */
     inline def cause: Option[Throwable] = error match
       case e: InvokeError            => e.cause
       case e: PluginError            => e.cause
@@ -246,15 +246,15 @@ object TauriError:
   // Helper Constructors
   // ====================
 
-  /** Wrap any Throwable into a TauriError.
+  /** Wrap any Throwable into a TausiError.
     *
-    * Returns the input unchanged if already a TauriError, otherwise wraps in [[GenericError]].
+    * Returns the input unchanged if already a TausiError, otherwise wraps in [[GenericError]].
     */
-  inline def fromThrowable(t: Throwable): TauriError = t match
-    case e: TauriError => e
+  inline def fromThrowable(t: Throwable): TausiError = t match
+    case e: TausiError => e
     case e             => GenericError(s"Unexpected error: ${e.getMessage}", Some(e))
 
-  /** Wrap JavaScript error into a TauriError.
+  /** Wrap JavaScript error into a TausiError.
     *
     * Handles various JavaScript error representations safely.
     *
@@ -262,7 +262,7 @@ object TauriError:
     * @param context Descriptive context for error message
     * @return GenericError wrapping the JS error
     */
-  def fromJSError(error: Any, context: String): TauriError =
+  def fromJSError(error: Any, context: String): TausiError =
     error match
       case e: js.JavaScriptException =>
         GenericError(s"$context: ${e.getMessage}", Some(e))
@@ -273,5 +273,5 @@ object TauriError:
       case _ =>
         GenericError(s"$context: Unknown JavaScript error", None)
 
-  given CanEqual[TauriError, TauriError] = CanEqual.derived
-end TauriError
+  given CanEqual[TausiError, TausiError] = CanEqual.derived
+end TausiError

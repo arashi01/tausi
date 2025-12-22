@@ -41,7 +41,7 @@ import tausi.api.EventOptions
 import tausi.api.EventTarget
 import tausi.api.Resource
 import tausi.api.ResourceId
-import tausi.api.TauriError
+import tausi.api.TausiError
 import tausi.api.core as Core
 import tausi.api.events as CoreEvent
 
@@ -49,7 +49,7 @@ import tausi.api.events as CoreEvent
   *
   * Provides:
   *   - ZIO-based wrappers for all core Tauri operations
-  *   - Typed error channel variants (IO[TauriError, A])
+  *   - Typed error channel variants (IO[TausiError, A])
   *   - Extension methods for Either-based and error-channel variants
   *   - Scope-based lifecycle management
   *   - ZStream integration for channels
@@ -68,32 +68,32 @@ package object zio:
 
   /** Invoke a zero-argument Tauri command.
     *
-    * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
+    * Errors from the Future failure channel are mapped to ZIO's error channel as TausiError.
     *
     * @param cmd The Command0 instance (resolved implicitly)
     * @tparam Res The expected return type
-    * @return IO with TauriError in the error channel
+    * @return IO with TausiError in the error channel
     *
     * @example
     *   {{{
     * import tausi.zio.*
     * import tausi.api.commands.app.{given, *}
     *
-    * val version: IO[TauriError, String] = invoke  // Command0[String] resolved implicitly
+    * val version: IO[TausiError, String] = invoke  // Command0[String] resolved implicitly
     *   }}}
     */
-  def invoke[Res](using cmd: Command0[Res])(using Trace): IO[TauriError, Res] =
-    ZIO.fromFuture(ec => Core.invoke[Res](using cmd, ec)).mapError(TauriError.fromThrowable)
+  def invoke[Res](using cmd: Command0[Res])(using Trace): IO[TausiError, Res] =
+    ZIO.fromFuture(ec => Core.invoke[Res](using cmd, ec)).mapError(TausiError.fromThrowable)
 
   /** Invoke a Tauri command with parameters.
     *
-    * Errors from the Future failure channel are mapped to ZIO's error channel as TauriError.
+    * Errors from the Future failure channel are mapped to ZIO's error channel as TausiError.
     *
     * @param req The request parameters
     * @param cmd The Command instance (resolved implicitly)
     * @tparam Req The request parameter type
     * @tparam Res The expected return type
-    * @return IO with TauriError in the error channel
+    * @return IO with TausiError in the error channel
     *
     * @example
     *   {{{
@@ -103,8 +103,8 @@ package object zio:
     * invoke(SetTitle("main", "My App"))
     *   }}}
     */
-  def invoke[Req, Res](req: Req)(using cmd: Command[Req, Res])(using Trace): IO[TauriError, Res] =
-    ZIO.fromFuture(ec => Core.invoke[Req, Res](req)(using cmd, ec)).mapError(TauriError.fromThrowable)
+  def invoke[Req, Res](req: Req)(using cmd: Command[Req, Res])(using Trace): IO[TausiError, Res] =
+    ZIO.fromFuture(ec => Core.invoke[Req, Res](req)(using cmd, ec)).mapError(TausiError.fromThrowable)
 
   // ====================
   // File Conversion
@@ -114,18 +114,18 @@ package object zio:
     * "asset" protocol.
     *
     * @param filePath The file path to convert
-    * @return UIO containing Either a TauriError or the converted URL
+    * @return UIO containing Either a TausiError or the converted URL
     */
-  def convertFileSrc(filePath: String): UIO[Either[TauriError, String]] =
+  def convertFileSrc(filePath: String): UIO[Either[TausiError, String]] =
     ZIO.succeed(Core.convertFileSrc(filePath))
 
   /** Convert a device file path to a URL that can be loaded by the webview.
     *
     * @param filePath The file path to convert
     * @param protocol The protocol to use
-    * @return UIO containing Either a TauriError or the converted URL
+    * @return UIO containing Either a TausiError or the converted URL
     */
-  def convertFileSrc(filePath: String, protocol: String): UIO[Either[TauriError, String]] =
+  def convertFileSrc(filePath: String, protocol: String): UIO[Either[TausiError, String]] =
     ZIO.succeed(Core.convertFileSrc(filePath, protocol))
 
   // ====================
@@ -136,27 +136,27 @@ package object zio:
     *
     * @param plugin The plugin name
     * @tparam T The permission response type
-    * @return IO with TauriError in the error channel
+    * @return IO with TausiError in the error channel
     */
-  def checkPermissions[T](plugin: String)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.checkPermissions[T](plugin)(using ec)).mapError(TauriError.fromThrowable)
+  def checkPermissions[T](plugin: String)(using Trace): IO[TausiError, T] =
+    ZIO.fromFuture(ec => Core.checkPermissions[T](plugin)(using ec)).mapError(TausiError.fromThrowable)
 
   /** Request permissions for a plugin.
     *
     * @param plugin The plugin name
     * @tparam T The permission response type
-    * @return IO with TauriError in the error channel
+    * @return IO with TausiError in the error channel
     */
-  def requestPermissions[T](plugin: String)(using Trace): IO[TauriError, T] =
-    ZIO.fromFuture(ec => Core.requestPermissions[T](plugin)(using ec)).mapError(TauriError.fromThrowable)
+  def requestPermissions[T](plugin: String)(using Trace): IO[TausiError, T] =
+    ZIO.fromFuture(ec => Core.requestPermissions[T](plugin)(using ec)).mapError(TausiError.fromThrowable)
 
   /** Close a Tauri resource.
     *
     * @param rid The resource identifier
-    * @return IO with TauriError in the error channel
+    * @return IO with TausiError in the error channel
     */
-  def closeResource(rid: ResourceId)(using Trace): IO[TauriError, Unit] =
-    ZIO.fromFuture(ec => Core.closeResource(rid)(using ec)).mapError(TauriError.fromThrowable)
+  def closeResource(rid: ResourceId)(using Trace): IO[TausiError, Unit] =
+    ZIO.fromFuture(ec => Core.closeResource(rid)(using ec)).mapError(TausiError.fromThrowable)
 
   // ====================
   // Event System
@@ -173,7 +173,7 @@ package object zio:
       * @param ev
       *   The Event instance defining name and payload type
       * @return
-      *   IO with TauriError in the error channel containing the event handle
+      *   IO with TausiError in the error channel containing the event handle
       *
       * @example
       *   {{{
@@ -186,34 +186,34 @@ package object zio:
       * }
       *   }}}
       */
-    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+    def listen[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): IO[TauriError, EventHandle] =
+    ): IO[TausiError, EventHandle] =
       listen(handler, EventOptions.default)
 
     /** Register a persistent listener with explicit options. */
-    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+    def listen[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): IO[TauriError, EventHandle] =
+    ): IO[TausiError, EventHandle] =
       liftEventIO(CoreEvent.listen(handler, options))
 
     /** Register a once-off listener with default options.
       *
       * The listener automatically unregisters after receiving the first event.
       */
-    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+    def once[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): IO[TauriError, EventHandle] =
+    ): IO[TausiError, EventHandle] =
       once(handler, EventOptions.default)
 
     /** Register a once-off listener with explicit options. */
-    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+    def once[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): IO[TauriError, EventHandle] =
+    ): IO[TausiError, EventHandle] =
       liftEventIO(CoreEvent.once(handler, options))
 
     /** Emit an event with a payload.
@@ -225,7 +225,7 @@ package object zio:
       * @param ev
       *   The Event instance defining name and payload type
       * @return
-      *   IO with TauriError in the error channel
+      *   IO with TausiError in the error channel
       *
       * @example
       *   {{{
@@ -235,25 +235,25 @@ package object zio:
       * events.emit(SurveySubmission("test data"))
       *   }}}
       */
-    def emit[A](payload: A)(using ev: tausi.api.Event[A], trace: Trace): IO[TauriError, Unit] =
+    def emit[A](payload: A)(using ev: tausi.api.Event[A], trace: Trace): IO[TausiError, Unit] =
       liftEventIO(CoreEvent.emit(payload))
 
     /** Emit an event to a specific target. */
     def emitTo[A](target: EventTarget, payload: A)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): IO[TauriError, Unit] =
+    ): IO[TausiError, Unit] =
       liftEventIO(CoreEvent.emitTo(target, payload))
 
     /** Emit an event to a specific label. */
     def emitTo[A](label: String, payload: A)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): IO[TauriError, Unit] =
+    ): IO[TausiError, Unit] =
       liftEventIO(CoreEvent.emitTo(label, payload))
 
     /** Unlisten using a previously obtained handle. */
-    def unlisten(handle: EventHandle)(using Trace): IO[TauriError, Unit] =
+    def unlisten(handle: EventHandle)(using Trace): IO[TausiError, Unit] =
       liftEventIO(CoreEvent.unlisten(handle))
 
     /** Listen to events with effect-based handler. Returns a scoped resource that automatically
@@ -261,20 +261,20 @@ package object zio:
       *
       * Decode errors from the event system are propagated through the handler's error channel.
       */
-    def listenScoped[A](handler: EventMessage[A] => IO[TauriError, Unit])(using
+    def listenScoped[A](handler: EventMessage[A] => IO[TausiError, Unit])(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): ZIO[Scope, TauriError, EventHandle] =
+    ): ZIO[Scope, TausiError, EventHandle] =
       listenScoped(handler, EventOptions.default)
 
     /** Listen with effect-based handler and explicit options.
       *
       * Decode errors from the event system are propagated through the handler's error channel.
       */
-    def listenScoped[A](handler: EventMessage[A] => IO[TauriError, Unit], options: EventOptions)(using
+    def listenScoped[A](handler: EventMessage[A] => IO[TausiError, Unit], options: EventOptions)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): ZIO[Scope, TauriError, EventHandle] =
+    ): ZIO[Scope, TausiError, EventHandle] =
       ZIO.acquireRelease(
         listen(eitherCallbackFrom(handler), options)
       )(handle => unlisten(handle).orDie)
@@ -289,11 +289,11 @@ package object zio:
       * import tausi.zio.*
       * import myapp.events.AppEvents.{given, *}
       *
-      * val stream: ZStream[Any, TauriError, EventMessage[SurveySubmission]] =
+      * val stream: ZStream[Any, TausiError, EventMessage[SurveySubmission]] =
       *   events.stream[SurveySubmission]
       *   }}}
       */
-    def stream[A](using ev: tausi.api.Event[A], trace: Trace): ZStream[Any, TauriError, EventMessage[A]] =
+    def stream[A](using ev: tausi.api.Event[A], trace: Trace): ZStream[Any, TausiError, EventMessage[A]] =
       stream(EventOptions.default)
 
     /** Create a ZStream with explicit options.
@@ -303,11 +303,11 @@ package object zio:
     def stream[A](options: EventOptions)(using
       ev: tausi.api.Event[A],
       trace: Trace
-    ): ZStream[Any, TauriError, EventMessage[A]] =
+    ): ZStream[Any, TausiError, EventMessage[A]] =
       ZStream.scoped {
         for
-          queue <- ZIO.acquireRelease(Queue.unbounded[Either[TauriError.EventError, EventMessage[A]]])(_.shutdown)
-          eitherHandler: (Either[TauriError.EventError, EventMessage[A]] => Unit) =
+          queue <- ZIO.acquireRelease(Queue.unbounded[Either[TausiError.EventError, EventMessage[A]]])(_.shutdown)
+          eitherHandler: (Either[TausiError.EventError, EventMessage[A]] => Unit) =
             result =>
               _root_.zio.Unsafe.unsafe { implicit unsafe =>
                 // Offer to queue synchronously. If queue is shut down, offer will fail silently.
@@ -331,8 +331,8 @@ package object zio:
       * Errors in the Either (decode failures) are propagated through the ZIO error channel.
       */
     private def eitherCallbackFrom[A](
-      handler: EventMessage[A] => IO[TauriError, Unit]
-    ): Either[TauriError.EventError, EventMessage[A]] => Unit =
+      handler: EventMessage[A] => IO[TausiError, Unit]
+    ): Either[TausiError.EventError, EventMessage[A]] => Unit =
       result =>
         _root_.zio.Unsafe.unsafe { implicit unsafe =>
           val effect = result match
@@ -342,8 +342,8 @@ package object zio:
         }
   end events
 
-  private def liftEventIO[A](op: ExecutionContext ?=> scala.concurrent.Future[A])(using Trace): IO[TauriError, A] =
-    ZIO.fromFuture(ec => op(using ec)).mapError(TauriError.fromThrowable)
+  private def liftEventIO[A](op: ExecutionContext ?=> scala.concurrent.Future[A])(using Trace): IO[TausiError, A] =
+    ZIO.fromFuture(ec => op(using ec)).mapError(TausiError.fromThrowable)
 
   // ====================
   // Extensions for Resource Lifecycle
@@ -352,10 +352,10 @@ package object zio:
   extension (resource: Resource)
     /** Close this resource with ZIO encapsulation.
       *
-      * @return IO with TauriError in the error channel
+      * @return IO with TausiError in the error channel
       */
-    def closeZIO(using Trace): IO[TauriError, Unit] =
-      ZIO.fromFuture(ec => resource.close()(using ec)).mapError(TauriError.fromThrowable)
+    def closeZIO(using Trace): IO[TausiError, Unit] =
+      ZIO.fromFuture(ec => resource.close()(using ec)).mapError(TausiError.fromThrowable)
 
   // ====================
   // Resource Lifecycle Management
@@ -370,7 +370,7 @@ package object zio:
     * import tausi.zio.*
     * import tausi.api.Closeable
     *
-    * def useResource[R: Closeable](r: R): ZIO[Scope, TauriError, Unit] =
+    * def useResource[R: Closeable](r: R): ZIO[Scope, TausiError, Unit] =
     *   r.toScoped.flatMap { resource =>
     *     // Use the resource safely
     *     // Cleanup happens automatically even on errors
@@ -403,14 +403,14 @@ package object zio:
       *
       * Complexity: O(1) + cleanup cost
       */
-    def toScoped(using trace: Trace): ZIO[Scope, TauriError, R] =
+    def toScoped(using trace: Trace): ZIO[Scope, TausiError, R] =
       ZIO.acquireRelease(
         acquire = ZIO.succeed(resource)(using trace)
       )(release =
         r =>
           ZIO
             .fromFuture(ec => closeable.close(r)(using ec))(using trace)
-            .mapError(TauriError.fromThrowable)
+            .mapError(TausiError.fromThrowable)
             .orDie // Convert to defect since release failures should not be recoverable
       )(using trace)
 
@@ -425,7 +425,7 @@ package object zio:
       *   {{{
       * import tausi.zio.*
       *
-      * def loadImage(path: String): ZIO[Scope, TauriError, MyImage] =
+      * def loadImage(path: String): ZIO[Scope, TausiError, MyImage] =
       *   MyImage.empty.asScoped {
       *     for {
       *       img <- invoke(FromPath(path))
@@ -433,12 +433,12 @@ package object zio:
       *   }
       *   }}}
       */
-    def asScoped(acquire: ZIO[Any, TauriError, R])(using trace: Trace): ZIO[Scope, TauriError, R] =
+    def asScoped(acquire: ZIO[Any, TausiError, R])(using trace: Trace): ZIO[Scope, TausiError, R] =
       ZIO.acquireRelease(acquire)(release =
         r =>
           ZIO
             .fromFuture(ec => closeable.close(r)(using ec))(using trace)
-            .mapError(TauriError.fromThrowable)
+            .mapError(TausiError.fromThrowable)
             .orDie
       )(using trace)
   end extension

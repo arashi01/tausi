@@ -142,7 +142,7 @@ The `StreamState` ADT provides visibility into all lifecycle phases:
 enum StreamState[+A]:
   case Running                         // Stream active, no values yet
   case Value(value: A)                 // Latest value received
-  case Failed(error: TauriError)       // Stream terminated with error
+  case Failed(error: TausiError)       // Stream terminated with error
   case Completed                       // Stream completed (no final value)
   case CompletedWith(value: A)         // Stream completed with final value
 ```

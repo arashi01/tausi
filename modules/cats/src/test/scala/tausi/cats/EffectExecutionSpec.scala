@@ -27,7 +27,7 @@ import cats.effect.std.Dispatcher
 
 import munit.CatsEffectSuite
 
-import tausi.api.TauriError
+import tausi.api.TausiError
 
 /** Tests for effect execution extensions.
   *
@@ -46,7 +46,7 @@ class EffectExecutionSpec extends CatsEffectSuite:
   dispatcherFixture.test("runWith(Either) should invoke callback with Right on success"): dispatcher =>
     given Dispatcher[IO] = dispatcher
     for
-      deferred <- Deferred[IO, Either[TauriError, Int]]
+      deferred <- Deferred[IO, Either[TausiError, Int]]
       effect = IO.pure(42)
       _ = effect.runWith(result => dispatcher.unsafeRunAndForget(deferred.complete(result)))
       result <- deferred.get.timeout(1.second)
@@ -55,14 +55,14 @@ class EffectExecutionSpec extends CatsEffectSuite:
   dispatcherFixture.test("runWith(Either) should invoke callback with Left on failure"): dispatcher =>
     given Dispatcher[IO] = dispatcher
     for
-      deferred <- Deferred[IO, Either[TauriError, Int]]
+      deferred <- Deferred[IO, Either[TausiError, Int]]
       effect: IO[Int] = IO.raiseError(TestException("boom"))
       _ = effect.runWith(result => dispatcher.unsafeRunAndForget(deferred.complete(result)))
       result <- deferred.get.timeout(1.second)
     yield
       assert(result.isLeft)
-      // The error is wrapped in TauriError.GenericError via fromThrowable
-      assert(result.left.toOption.exists(_.isInstanceOf[TauriError.GenericError])) // scalafix:ok
+      // The error is wrapped in TausiError.GenericError via fromThrowable
+      assert(result.left.toOption.exists(_.isInstanceOf[TausiError.GenericError])) // scalafix:ok
       assert(result.left.toOption.exists(_.message.contains("boom")))
 
   // ====================
@@ -88,12 +88,12 @@ class EffectExecutionSpec extends CatsEffectSuite:
       effect: IO[Int] = IO.raiseError(TestException("failure"))
       _ = effect.runWith(
             onSuccess = _ => (),
-            // onError receives TauriError, use .message
+            // onError receives TausiError, use .message
             onError = e => dispatcher.unsafeRunAndForget(deferred.complete(e.message))
           )
       result <- deferred.get.timeout(1.second)
     yield
-      // Error is wrapped in TauriError.UnexpectedError with message "Unexpected error: failure"
+      // Error is wrapped in TausiError.UnexpectedError with message "Unexpected error: failure"
       assert(result.contains("failure"))
     end for
 
