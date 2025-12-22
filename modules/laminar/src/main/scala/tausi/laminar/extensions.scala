@@ -223,6 +223,7 @@ extension [S[_]: StreamSource, A](stream: S[A])
     */
   def toStateSignal(using owner: Owner): Signal[StreamState[A]] =
     val variable = Var[StreamState[A]](StreamState.Running)
+
     val subscription = stream.subscribe(
       onNext = a => variable.set(StreamState.Value(a)),
       onError = err => variable.set(StreamState.Failed(err)),
@@ -231,7 +232,11 @@ extension [S[_]: StreamSource, A](stream: S[A])
           case StreamState.Value(lastValue) => variable.set(StreamState.CompletedWith(lastValue))
           case _                            => variable.set(StreamState.Completed)
     )
+
+    // Register the subscription with the Owner for proper lifecycle management.
+    // When the Owner is killed (e.g., component unmounts), the subscription is automatically cancelled.
     registerCleanup(owner, subscription)
+
     variable.signal
   end toStateSignal
 

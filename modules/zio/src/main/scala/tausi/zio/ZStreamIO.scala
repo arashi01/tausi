@@ -94,11 +94,11 @@ object ZStreamIO:
         }
 
         StreamSubscription { () =>
-          // Use interruptFork (fire-and-forget) rather than interrupt.
-          // The interrupt effect cannot be run synchronously in JS because
-          // unsafe.run would block waiting for the fiber to complete.
+          // Interrupt the fibre on cancellation.
+          // This properly terminates the stream and releases resources.
           Unsafe.unsafe { (unsafe: Unsafe) =>
             given Unsafe = unsafe
+            // interruptFork is fire-and-forget, allowing synchronous cancellation in JS
             runtime.unsafe.run(fibre.interruptFork).getOrThrowFiberFailure()
           }
         }

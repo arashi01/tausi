@@ -71,31 +71,23 @@ object CompletePage:
         state.isSubmitting.set(false)
         state.submissionResult.set(Some(response))
 
-        org.scalajs.dom.console.log("[CompletePage] Emitting success event")
         // Emit success event (demonstrates event emission)
         events.emit(SurveySubmittedEvent(
           success = true,
           filePath = Some(response.filePath),
           errorMessage = None
-        )).runWith(
-          onSuccess = _ => org.scalajs.dom.console.log("[CompletePage] Success event emitted successfully"),
-          onError = err => org.scalajs.dom.console.error(s"[CompletePage] Failed to emit success event: ${err.message}")
-        )
+        )).runWithUnsafe()
       },
       onError = err => {
         state.isSubmitting.set(false)
         state.submissionError.set(Some(err.message))
 
-        org.scalajs.dom.console.log("[CompletePage] Emitting failure event")
         // Emit failure event
         events.emit(SurveySubmittedEvent(
           success = false,
           filePath = None,
           errorMessage = Some(err.message)
-        )).runWith(
-          onSuccess = _ => org.scalajs.dom.console.log("[CompletePage] Failure event emitted successfully"),
-          onError = err => org.scalajs.dom.console.error(s"[CompletePage] Failed to emit failure event: ${err.message}")
-        )
+        )).runWithUnsafe()
       }
     )
 
