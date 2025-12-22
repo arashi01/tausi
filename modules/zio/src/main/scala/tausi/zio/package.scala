@@ -304,23 +304,22 @@ package object zio:
       ev: tausi.api.Event[A],
       trace: Trace
     ): ZStream[Any, TauriError, EventMessage[A]] =
-      org.scalajs.dom.console.log(s"[events.stream] Creating stream for event: ${ev.name}")
       ZStream.scoped {
-        org.scalajs.dom.console.log("[events.stream] Scoped effect starting")
         for
           queue <- ZIO.acquireRelease(Queue.unbounded[Either[TauriError.EventError, EventMessage[A]]])(_.shutdown)
-          _ = org.scalajs.dom.console.log("[events.stream] Queue created")
           eitherHandler: (Either[TauriError.EventError, EventMessage[A]] => Unit) =
             result =>
-              org.scalajs.dom.console.log(s"[events.stream] Event handler invoked with: $result")
               _root_.zio.Unsafe.unsafe { implicit unsafe =>
-                _root_.zio.Runtime.default.unsafe.run(queue.offer(result).unit).getOrThrowFiberFailure()
+                // Offer to queue synchronously. If queue is shut down, offer will fail silently.
+                // We ignore the result because queue shutdown is expected during cleanup.
+                _root_.zio.Runtime.default.unsafe
+                  .run(
+                    queue.offer(result).ignore
+                  )
+                  .getOrThrowFiberFailure(): Unit
               }
           handle <- ZIO.acquireRelease(
-                      ZIO.succeed(org.scalajs.dom.console.log("[events.stream] Registering event listener")) *>
-                        listen(eitherHandler, options).tap(h =>
-                          ZIO.succeed(org.scalajs.dom.console.log(s"[events.stream] Listener registered with handle: $h"))
-                        )
+                      listen(eitherHandler, options)
                     )(handle => unlisten(handle).orDie)
         yield ZStream.fromQueue(queue).mapZIO(ZIO.fromEither(_).mapError(identity))
         end for

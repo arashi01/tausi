@@ -54,45 +54,8 @@ object EventLog:
   given Runtime[Any] = Runtime.default
 
   def apply(): HtmlElement =
-    // State var to hold the current stream state
-    val stateVar: Var[StreamState[EventMessage[SurveySubmittedEvent]]] =
-      Var(StreamState.Running)
-
     div(
       cls := "fixed bottom-4 right-4 w-80 bg-surface-800 border border-border rounded-lg shadow-lg overflow-hidden",
-      // Set up stream subscription when mounted
-      onMountUnmountCallback(
-        mount = ctx => {
-          given Owner = ctx.owner
-
-          org.scalajs.dom.console.log("[EventLog] Component mounted, setting up stream subscription")
-
-          // Create ZStream for survey submission events
-          // This stream emits EventMessage[SurveySubmittedEvent] for each event
-          val submissionStream = events.stream[SurveySubmittedEvent]
-
-          org.scalajs.dom.console.log("[EventLog] Created submissionStream, calling toStateSignal")
-
-          // Convert to Laminar Signal with full lifecycle state
-          // StreamSource[ZStreamIO] instance (from tausi.zio.ZStreamIO.given)
-          // bridges ZIO streams to Laminar observables
-          val stateSignal: Signal[StreamState[EventMessage[SurveySubmittedEvent]]] =
-            submissionStream.toStateSignal
-
-          org.scalajs.dom.console.log("[EventLog] toStateSignal returned, subscribing to signal")
-
-          // Forward stream state to our Var
-          stateSignal.foreach { state =>
-            org.scalajs.dom.console.log(s"[EventLog] Signal state changed: $state")
-            stateVar.set(state)
-          }
-
-          org.scalajs.dom.console.log("[EventLog] Stream subscription complete")
-        },
-        unmount = _ => {
-          org.scalajs.dom.console.log("[EventLog] Component unmounted")
-        }
-      ),
       // Header
       div(
         cls := "bg-surface-700 px-4 py-2 border-b border-border flex items-center justify-between",
@@ -104,9 +67,17 @@ object EventLog:
         span(cls := "text-xs text-text-muted", "Live")
       ),
       // Stream content - renders based on stream state
+      // The stream subscription is created when the element is mounted,
+      // ensuring the Laminar Owner is available for lifecycle management
       div(
         cls := "p-4 max-h-48 overflow-y-auto",
-        child <-- stateVar.signal.map(renderStreamState)
+        onMountCallback { ctx =>
+          given Owner = ctx.owner
+          // Subscribe to the stream within the mount context where Owner is available
+          ctx.thisNode.amend(
+            child <-- events.stream[SurveySubmittedEvent].toStateSignal.map(renderStreamState)
+          )
+        }
       ),
       // Footer with pattern documentation
       div(
