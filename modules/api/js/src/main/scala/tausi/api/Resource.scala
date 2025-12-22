@@ -43,7 +43,7 @@ object Resource:
       * After closing, the resource cannot be used.
       *
       * @param ec Execution context for async operations
-      * @return Future containing Either a TauriError or Unit
+      * @return Future containing Either a TausiError or Unit
       */
     def close()(using ec: ExecutionContext): Future[Unit] =
       // Import core in method to avoid circular dependency

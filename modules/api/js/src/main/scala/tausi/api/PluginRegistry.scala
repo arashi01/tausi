@@ -106,7 +106,7 @@ object PluginRegistry:
     * @param ec Execution context
     * @return Future containing a list of plugin initialization errors (empty if all succeeded)
     */
-  def initializeAll(using ExecutionContext): Future[List[TauriError.PluginError]] =
+  def initializeAll(using ExecutionContext): Future[List[TausiError.PluginError]] =
     val pluginsToInit = plugins.values.toList.filter(!_.initialized)
 
     Future
@@ -118,7 +118,7 @@ object PluginRegistry:
               None
             }
             .recover { case e =>
-              Some(TauriError.PluginError(entry.name, s"Failed to initialize: ${e.getMessage}", Some(e)))
+              Some(TausiError.PluginError(entry.name, s"Failed to initialize: ${e.getMessage}", Some(e)))
             }
         }
       }
@@ -136,7 +136,7 @@ object PluginRegistry:
     * @param ec Execution context
     * @return Future containing a list of plugin shutdown errors (empty if all succeeded)
     */
-  def shutdownAll(using ExecutionContext): Future[List[TauriError.PluginError]] =
+  def shutdownAll(using ExecutionContext): Future[List[TausiError.PluginError]] =
     val pluginsToShutdown = plugins.values.toList.filter(_.initialized).reverse
 
     Future
@@ -148,7 +148,7 @@ object PluginRegistry:
               None
             }
             .recover { case e =>
-              Some(TauriError.PluginError(entry.name, s"Failed to shutdown: ${e.getMessage}", Some(e)))
+              Some(TausiError.PluginError(entry.name, s"Failed to shutdown: ${e.getMessage}", Some(e)))
             }
         }
       }

@@ -25,7 +25,7 @@ import _root_.cats.effect.std.Dispatcher
 
 import _root_.fs2.Stream
 
-import tausi.api.TauriError
+import tausi.api.TausiError
 import tausi.api.stream.StreamSource
 import tausi.api.stream.StreamSubscription
 
@@ -67,13 +67,13 @@ object Fs2StreamIO:
     extension [A](stream: Fs2StreamIO[A])
       override def subscribe(
         onNext: A => Unit,
-        onError: TauriError => Unit,
+        onError: TausiError => Unit,
         onComplete: () => Unit
       ): StreamSubscription =
-        // Wrap upstream error into TauriError.StreamError
-        inline def wrapError(t: Throwable): TauriError = t match
-          case e: TauriError => e
-          case e             => TauriError.StreamError(e.getMessage, Some(e))
+        // Wrap upstream error into TausiError.StreamError
+        inline def wrapError(t: Throwable): TausiError = t match
+          case e: TausiError => e
+          case e             => TausiError.StreamError(e.getMessage, Some(e))
 
         val effect: IO[Unit] =
           stream

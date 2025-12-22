@@ -44,7 +44,7 @@ import tausi.api.{core as Core, events as CoreEvent, *}
   *
   * val program: IO[String] = invoke("greet", js.Dictionary("name" -> "Alice"))
   * program.handleErrorWith {
-  *   case err: TauriError => IO.println(s"Error: ${err.message}")
+  *   case err: TausiError => IO.println(s"Error: ${err.message}")
   *   case err => IO.raiseError(err)
   * }
   * }}}
@@ -53,12 +53,12 @@ import tausi.api.{core as Core, events as CoreEvent, *}
   * {{{
   * import tausi.cats.*
   *
-  * val program: EitherT[IO, TauriError, String] =
+  * val program: EitherT[IO, TausiError, String] =
   *   invokeEither("greet", js.Dictionary("name" -> "Alice"))
   *
   * program.value.flatMap {
   *   case Right(result) => IO.println(result)
-  *   case Left(error: TauriError) => IO.println(s"TauriError: ${error.message}")
+  *   case Left(error: TausiError) => IO.println(s"TausiError: ${error.message}")
   * }
   * }}}
   *
@@ -81,11 +81,11 @@ package object cats:
 
   /** Invoke a zero-argument Tauri command.
     *
-    * Errors are propagated through IO's error channel as TauriError.
+    * Errors are propagated through IO's error channel as TausiError.
     *
     * @param cmd The Command0 instance (resolved implicitly)
     * @tparam Res The expected return type
-    * @return IO that succeeds with Res or fails with TauriError
+    * @return IO that succeeds with Res or fails with TausiError
     *
     * @example {{{import tausi.cats.* import tausi.api.commands.app.{given, *}
     *
@@ -99,13 +99,13 @@ package object cats:
 
   /** Invoke a Tauri command with parameters.
     *
-    * Errors are propagated through IO's error channel as TauriError.
+    * Errors are propagated through IO's error channel as TausiError.
     *
     * @param req The request parameters
     * @param cmd The Command instance (resolved implicitly)
     * @tparam Req The request parameter type
     * @tparam Res The expected return type
-    * @return IO that succeeds with Res or fails with TauriError
+    * @return IO that succeeds with Res or fails with TausiError
     *
     * @example {{{import tausi.cats.* import tausi.api.commands.window.{given, *}
     *
@@ -121,40 +121,40 @@ package object cats:
 
   /** Invoke a zero-argument command with typed error channel (EitherT).
     *
-    * Provides ZIO-like typed error channels using EitherT[IO, TauriError, T]. Use this when you
-    * want explicit TauriError in the type signature for composable error handling.
+    * Provides ZIO-like typed error channels using EitherT[IO, TausiError, T]. Use this when you
+    * want explicit TausiError in the type signature for composable error handling.
     *
     * @param cmd The Command0 instance (resolved implicitly)
     * @tparam Res The expected return type
-    * @return EitherT with TauriError in the error channel
+    * @return EitherT with TausiError in the error channel
     *
     * @example
     *   {{{
     * import tausi.cats.*
     * import tausi.api.commands.app.{given, *}
     *
-    * val program: EitherT[IO, TauriError, String] = for {
+    * val program: EitherT[IO, TausiError, String] = for {
     *   version <- invokeEither[String]
     *   name <- invokeEither[String](using app.name)
     * } yield s"$name v$version"
     *
     * program.value.flatMap {
     *   case Right(result) => IO.println(s"Success: $result")
-    *   case Left(error) => IO.println(s"TauriError: ${error.message}")
+    *   case Left(error) => IO.println(s"TausiError: ${error.message}")
     * }
     *   }}}
     */
-  def invokeEither[Res](using cmd: Command0[Res]): EitherT[IO, TauriError, Res] =
+  def invokeEither[Res](using cmd: Command0[Res]): EitherT[IO, TausiError, Res] =
     EitherT(invoke[Res].attempt.map(_.left.map {
-      case err: TauriError => err
-      case err             => TauriError.fromThrowable(err)
+      case err: TausiError => err
+      case err             => TausiError.fromThrowable(err)
     }))
 
   /** Invoke a command with parameters and typed error channel (EitherT). */
-  def invokeEither[Req, Res](req: Req)(using cmd: Command[Req, Res]): EitherT[IO, TauriError, Res] =
+  def invokeEither[Req, Res](req: Req)(using cmd: Command[Req, Res]): EitherT[IO, TausiError, Res] =
     EitherT(invoke[Req, Res](req).attempt.map(_.left.map {
-      case err: TauriError => err
-      case err             => TauriError.fromThrowable(err)
+      case err: TausiError => err
+      case err             => TausiError.fromThrowable(err)
     }))
 
   // ====================
@@ -168,9 +168,9 @@ package object cats:
     * invoke operations which use the error channel.
     *
     * @param filePath The file path to convert
-    * @return IO containing Either a TauriError or the converted URL
+    * @return IO containing Either a TausiError or the converted URL
     */
-  def convertFileSrc(filePath: String): IO[Either[TauriError, String]] =
+  def convertFileSrc(filePath: String): IO[Either[TausiError, String]] =
     IO.delay(Core.convertFileSrc(filePath))
 
   /** Convert a device file path to a URL that can be loaded by the webview.
@@ -180,9 +180,9 @@ package object cats:
     *
     * @param filePath The file path to convert
     * @param protocol The protocol to use
-    * @return IO containing Either a TauriError or the converted URL
+    * @return IO containing Either a TausiError or the converted URL
     */
-  def convertFileSrc(filePath: String, protocol: String): IO[Either[TauriError, String]] =
+  def convertFileSrc(filePath: String, protocol: String): IO[Either[TausiError, String]] =
     IO.delay(Core.convertFileSrc(filePath, protocol))
 
   // ====================
@@ -193,7 +193,7 @@ package object cats:
     *
     * @param plugin The plugin name
     * @tparam T The permission response type
-    * @return IO containing Either a TauriError or the permission state
+    * @return IO containing Either a TausiError or the permission state
     */
   def checkPermissions[T](plugin: String): IO[T] =
     IO.executionContext.flatMap: ec =>
@@ -203,7 +203,7 @@ package object cats:
     *
     * @param plugin The plugin name
     * @tparam T The permission response type
-    * @return IO containing Either a TauriError or the permission state
+    * @return IO containing Either a TausiError or the permission state
     */
   def requestPermissions[T](plugin: String): IO[T] =
     IO.executionContext.flatMap: ec =>
@@ -212,7 +212,7 @@ package object cats:
   /** Close a Tauri resource.
     *
     * @param rid The resource identifier
-    * @return IO containing Either a TauriError or Unit
+    * @return IO containing Either a TausiError or Unit
     */
   def closeResource(rid: ResourceId): IO[Unit] =
     IO.executionContext.flatMap: ec =>
@@ -245,13 +245,13 @@ package object cats:
       * }
       *   }}}
       */
-    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+    def listen[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit)(using
       ev: tausi.api.Event[A]
     ): IO[EventHandle] =
       listen(handler, EventOptions.default)
 
     /** Register a persistent listener with explicit options. */
-    def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+    def listen[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
       ev: tausi.api.Event[A]
     ): IO[EventHandle] =
       liftEventIO(CoreEvent.listen(handler, options))
@@ -260,13 +260,13 @@ package object cats:
       *
       * The listener automatically unregisters after receiving the first event.
       */
-    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+    def once[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit)(using
       ev: tausi.api.Event[A]
     ): IO[EventHandle] =
       once(handler, EventOptions.default)
 
     /** Register a once-off listener with explicit options. */
-    def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+    def once[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
       ev: tausi.api.Event[A]
     ): IO[EventHandle] =
       liftEventIO(CoreEvent.once(handler, options))
@@ -354,8 +354,8 @@ package object cats:
       Stream
         .resource {
           for
-            queue <- Resource.eval(Queue.unbounded[IO, Either[TauriError.EventError, EventMessage[A]]])
-            eitherHandler: (Either[TauriError.EventError, EventMessage[A]] => Unit) =
+            queue <- Resource.eval(Queue.unbounded[IO, Either[TausiError.EventError, EventMessage[A]]])
+            eitherHandler: (Either[TausiError.EventError, EventMessage[A]] => Unit) =
               result => dispatcher.unsafeRunAndForget(queue.offer(result))
             _ <- managedHandle(listen(eitherHandler, options))
           yield queue
@@ -375,7 +375,7 @@ package object cats:
       */
     private def eitherCallbackFrom[A](handler: EventMessage[A] => IO[Unit])(using
       dispatcher: Dispatcher[IO]
-    ): Either[TauriError.EventError, EventMessage[A]] => Unit =
+    ): Either[TausiError.EventError, EventMessage[A]] => Unit =
       result =>
         val effect = result match
           case Right(event) => handler(event)
@@ -390,7 +390,7 @@ package object cats:
   extension (resource: tausi.api.Resource)
     /** Close this resource with IO encapsulation.
       *
-      * @return IO containing Either a TauriError or Unit
+      * @return IO containing Either a TausiError or Unit
       */
     def closeIO: IO[Unit] =
       IO.executionContext.flatMap: ec =>
@@ -487,16 +487,16 @@ package object cats:
       * The effect is run via the Dispatcher with fire-and-forget semantics. The callback receives
       * the result as an Either, with Left for errors and Right for success.
       *
-      * All errors are normalised to [[TauriError]], ensuring consistent error handling
+      * All errors are normalised to [[TausiError]], ensuring consistent error handling
       * across the entire Tausi API.
       *
       * @param onResult
       *   called with the result (success or failure as Either)
       */
-    inline def runWith(onResult: Either[TauriError, A] => Unit)(using dispatcher: Dispatcher[IO]): Unit =
+    inline def runWith(onResult: Either[TausiError, A] => Unit)(using dispatcher: Dispatcher[IO]): Unit =
       dispatcher.unsafeRunAndForget(
         effect.attempt.flatMap { result =>
-          val normalised: Either[TauriError, A] = result.left.map(TauriError.fromThrowable)
+          val normalised: Either[TausiError, A] = result.left.map(TausiError.fromThrowable)
           IO(onResult(normalised))
         }
       )
@@ -504,19 +504,19 @@ package object cats:
     /** Execute the effect, invoking separate callbacks for success and failure.
       *
       * The effect is run via the Dispatcher with fire-and-forget semantics.
-      * All errors are normalised to [[TauriError]], ensuring consistent error handling
+      * All errors are normalised to [[TausiError]], ensuring consistent error handling
       * across the entire Tausi API.
       *
       * @param onSuccess
       *   called if the effect succeeds
       * @param onError
-      *   called if the effect fails (with normalised [[TauriError]])
+      *   called if the effect fails (with normalised [[TausiError]])
       */
-    inline def runWith(onSuccess: A => Unit, onError: TauriError => Unit)(using dispatcher: Dispatcher[IO]): Unit =
+    inline def runWith(onSuccess: A => Unit, onError: TausiError => Unit)(using dispatcher: Dispatcher[IO]): Unit =
       dispatcher.unsafeRunAndForget(
         effect.attempt.flatMap {
           case Right(a) => IO(onSuccess(a))
-          case Left(e)  => IO(onError(TauriError.fromThrowable(e)))
+          case Left(e)  => IO(onError(TausiError.fromThrowable(e)))
         }
       )
 

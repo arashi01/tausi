@@ -20,7 +20,7 @@
  */
 package tausi.laminar
 
-import tausi.api.TauriError
+import tausi.api.TausiError
 
 /** State ADT for stream-to-signal conversion with full lifecycle visibility.
   *
@@ -30,7 +30,7 @@ import tausi.api.TauriError
   * ==States==
   *   - [[Running]]: Stream is active but no value has been received yet (loading state)
   *   - [[Value]]: Stream emitted a value and is still running
-  *   - [[Failed]]: Stream terminated with an error (represented as [[TauriError]])
+  *   - [[Failed]]: Stream terminated with an error (represented as [[TausiError]])
   *   - [[Completed]]: Stream completed successfully without emitting a final value
   *   - [[CompletedWith]]: Stream completed successfully with a final value
   *
@@ -74,9 +74,9 @@ enum StreamState[+A]:
   /** Stream terminated with an error.
     *
     * @param error
-    *   The [[TauriError]] that caused the stream to fail
+    *   The [[TausiError]] that caused the stream to fail
     */
-  case Failed(error: TauriError)
+  case Failed(error: TausiError)
 
   /** Stream completed successfully without emitting a final value.
     *
@@ -128,7 +128,7 @@ object StreamState:
       case _                => None
 
     /** Get the error if the stream failed. */
-    def errorOption: Option[TauriError] = state match
+    def errorOption: Option[TausiError] = state match
       case Failed(e) => Some(e)
       case _         => None
 
@@ -148,7 +148,7 @@ object StreamState:
     inline def fold[B](
       onRunning: => B,
       onValue: A => B,
-      onFailed: TauriError => B,
+      onFailed: TausiError => B,
       onCompleted: => B,
       onCompletedWith: A => B
     ): B = state match

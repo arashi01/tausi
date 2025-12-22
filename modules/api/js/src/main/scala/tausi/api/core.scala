@@ -33,7 +33,7 @@ import tausi.api.internal.*
   * frontend. It provides type-safe command invocation using the Command typeclass system.
   *
   * Async functions return Future[T] with errors propagated through the Future's failure channel,
-  * wrapped in TauriError. Designed for seamless integration with effect systems (cats-effect, ZIO).
+  * wrapped in TausiError. Designed for seamless integration with effect systems (cats-effect, ZIO).
   */
 object core:
   /** Check if the code is running inside a Tauri application.
@@ -87,13 +87,13 @@ object core:
     * This is the primary way to call zero-argument Rust commands from the frontend. The command is
     * resolved from implicit scope using the Command0 typeclass.
     *
-    * Errors are propagated through the Future's failure channel and wrapped in TauriError. This
+    * Errors are propagated through the Future's failure channel and wrapped in TausiError. This
     * includes both Rust Result::Err values and unexpected errors (serialization, IPC failures).
     *
     * @param cmd The Command0 instance (resolved implicitly)
     * @param ec Execution context for async operations
     * @tparam Res The expected return type
-    * @return Future that succeeds with Res or fails with TauriError
+    * @return Future that succeeds with Res or fails with TausiError
     *
     * @example
     *   {{{
@@ -119,21 +119,21 @@ object core:
         Command.decodeResponse[Res](rawResponse)(using cmd.decoder) match
           case Right(response)   => Future.successful(response)
           case Left(decodeError) =>
-            val tauriError = TauriError.InvokeError(
+            val tausiError = TausiError.InvokeError(
               cmd.id.value,
               s"Failed to decode response: $decodeError",
               None
             )
-            Future.failed(tauriError)
+            Future.failed(tausiError)
       .recoverWith:
-        case error: TauriError => Future.failed(error) // Already wrapped
+        case error: TausiError => Future.failed(error) // Already wrapped
         case error: Throwable  =>
-          val tauriError = TauriError.InvokeError(
+          val tausiError = TausiError.InvokeError(
             cmd.id.value,
             s"Command invocation failed: ${error.getMessage}",
             Some(error)
           )
-          Future.failed(tauriError)
+          Future.failed(tausiError)
   end invoke
 
   /** Invoke a Tauri command with parameters.
@@ -141,14 +141,14 @@ object core:
     * This is the primary way to call parameterized Rust commands from the frontend. The command is
     * resolved from implicit scope using the Command typeclass.
     *
-    * Errors are propagated through the Future's failure channel and wrapped in TauriError.
+    * Errors are propagated through the Future's failure channel and wrapped in TausiError.
     *
     * @param req The request parameters
     * @param cmd The Command instance (resolved implicitly)
     * @param ec Execution context for async operations
     * @tparam Req The request parameter type
     * @tparam Res The expected return type
-    * @return Future that succeeds with Res or fails with TauriError
+    * @return Future that succeeds with Res or fails with TausiError
     *
     * @example
     *   {{{
@@ -176,21 +176,21 @@ object core:
         Command.decodeResponse[Res](rawResponse)(using cmd.decoder) match
           case Right(response)   => Future.successful(response)
           case Left(decodeError) =>
-            val tauriError = TauriError.InvokeError(
+            val tausiError = TausiError.InvokeError(
               cmd.id.value,
               s"Failed to decode response: $decodeError",
               None
             )
-            Future.failed(tauriError)
+            Future.failed(tausiError)
       .recoverWith:
-        case error: TauriError => Future.failed(error) // Already wrapped
+        case error: TausiError => Future.failed(error) // Already wrapped
         case error: Throwable  =>
-          val tauriError = TauriError.InvokeError(
+          val tausiError = TausiError.InvokeError(
             cmd.id.value,
             s"Command invocation failed: ${error.getMessage}",
             Some(error)
           )
-          Future.failed(tauriError)
+          Future.failed(tausiError)
   end invoke
 
   /** Convert a device file path to a URL that can be loaded by the webview.
@@ -204,7 +204,7 @@ object core:
     *   - Enable asset protocol: "assetProtocol": { "enable": true, "scope": [...] }
     *
     * @param filePath The file path to convert
-    * @return Either a TauriError or the converted URL
+    * @return Either a TausiError or the converted URL
     *
     * @example
     *   {{{
@@ -215,23 +215,23 @@ object core:
     *   case Left(error) => println(s"Error: ${error.message}")
     *   }}}
     */
-  inline def convertFileSrc(filePath: String): Either[TauriError, String] =
+  inline def convertFileSrc(filePath: String): Either[TausiError, String] =
     convertFileSrc(filePath, "asset")
 
   /** Convert a device file path to a URL that can be loaded by the webview.
     *
     * @param filePath The file path to convert
     * @param protocol The protocol to use
-    * @return Either a TauriError or the converted URL
+    * @return Either a TausiError or the converted URL
     */
   def convertFileSrc(
     filePath: String,
     protocol: String
-  ): Either[TauriError, String] =
+  ): Either[TausiError, String] =
     Try {
       TauriInternalsGlobal.convertFileSrc(filePath, protocol)
     }.toEither.left.map: error =>
-      TauriError.ConversionError.apply(
+      TausiError.ConversionError.apply(
         filePath,
         protocol,
         s"Failed to convert file path: ${error.getMessage}",
@@ -248,7 +248,7 @@ object core:
     * @param plugin The plugin name
     * @param ec Execution context for async operations
     * @tparam T The permission response type (plugin-specific)
-    * @return Future that succeeds with permission state or fails with TauriError
+    * @return Future that succeeds with permission state or fails with TausiError
     */
   def checkPermissions[T](
     plugin: String
@@ -261,11 +261,11 @@ object core:
 
     jsPromise.toFuture.recoverWith:
       case error: Throwable =>
-        val tauriError = TauriError.PermissionError(
+        val tausiError = TausiError.PermissionError(
           s"Failed to check permissions for plugin '$plugin': ${error.getMessage}",
           Some(error)
         )
-        Future.failed(tauriError)
+        Future.failed(tausiError)
   end checkPermissions
 
   /** Request permissions for a plugin.
@@ -278,7 +278,7 @@ object core:
     * @param plugin The plugin name
     * @param ec Execution context for async operations
     * @tparam T The permission response type (plugin-specific)
-    * @return Future that succeeds with permission state or fails with TauriError
+    * @return Future that succeeds with permission state or fails with TausiError
     */
   def requestPermissions[T](
     plugin: String
@@ -291,11 +291,11 @@ object core:
 
     jsPromise.toFuture.recoverWith:
       case error: Throwable =>
-        val tauriError = TauriError.PermissionError(
+        val tausiError = TausiError.PermissionError(
           s"Failed to request permissions for plugin '$plugin': ${error.getMessage}",
           Some(error)
         )
-        Future.failed(tauriError)
+        Future.failed(tausiError)
   end requestPermissions
 
   /** Close a Tauri resource.
@@ -307,7 +307,7 @@ object core:
     *
     * @param rid The resource identifier
     * @param ec Execution context for async operations
-    * @return Future that succeeds with Unit or fails with TauriError
+    * @return Future that succeeds with Unit or fails with TausiError
     *
     * @example
     *   {{{
@@ -331,11 +331,11 @@ object core:
 
     jsPromise.toFuture.recoverWith:
       case error: Throwable =>
-        val tauriError = TauriError.ResourceError(
+        val tausiError = TausiError.ResourceError(
           rid,
           s"Failed to close resource: ${error.getMessage}",
           Some(error)
         )
-        Future.failed(tauriError)
+        Future.failed(tausiError)
   end closeResource
 end core

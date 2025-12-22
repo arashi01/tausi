@@ -117,7 +117,7 @@ import zio.*
 import tausi.zio.*
 import tausi.api.commands.window.{given, *}
 
-val program: ZIO[Any, TauriError, Unit] = for
+val program: ZIO[Any, TausiError, Unit] = for
   _ <- invoke(SetTitle("main", "My App"))
   _ <- invoke(SetSize("main", 1024, 768))
   _ <- ZIO.log("Window configured")
@@ -196,8 +196,8 @@ val counter: ZStreamIO[Int] = ZStream.iterate(0)(_ + 1).take(10)
 val eventStream: EventStream[Int] = counter.toStreamUnsafe
 
 // Tier 2: Either-based (errors as values)
-val signal: Signal[Either[TauriError, Int]] =
-  counter.toSignal(Left(TauriError.StreamError("Loading...")))
+val signal: Signal[Either[TausiError, Int]] =
+  counter.toSignal(Left(TausiError.StreamError("Loading...")))
 
 // Tier 3: Full state (recommended for production)
 val stateSignal: Signal[StreamState[Int]] = counter.toStateSignal
@@ -209,7 +209,7 @@ The `StreamState` ADT provides full lifecycle visibility:
 enum StreamState[+A]:
   case Running                         // Stream is loading
   case Value(value: A)                 // Latest value received
-  case Failed(error: TauriError)       // Stream failed
+  case Failed(error: TausiError)       // Stream failed
   case Completed                       // Stream completed (no final value)
   case CompletedWith(value: A)         // Stream completed with final value
 ```

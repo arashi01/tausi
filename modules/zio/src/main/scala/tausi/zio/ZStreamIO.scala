@@ -23,22 +23,22 @@ package tausi.zio
 import _root_.zio.*
 import _root_.zio.stream.ZStream
 
-import tausi.api.TauriError
+import tausi.api.TausiError
 import tausi.api.stream.StreamSource
 import tausi.api.stream.StreamSubscription
 
-/** Type alias for ZIO streams with [[TauriError]] error channel.
+/** Type alias for ZIO streams with [[TausiError]] error channel.
   *
   * This alias provides a concrete stream type suitable for the [[StreamSource]] type class,
   * enabling effect-agnostic stream integration with UI frameworks like Laminar.
   *
-  * All errors are represented as [[TauriError]] variants, ensuring consistent error handling
+  * All errors are represented as [[TausiError]] variants, ensuring consistent error handling
   * across the entire Tausi API. This follows the errors-as-values principle.
   *
   * @tparam A
   *   The element type of the stream
   */
-type ZStreamIO[A] = ZStream[Any, TauriError, A]
+type ZStreamIO[A] = ZStream[Any, TausiError, A]
 
 /** Companion for [[ZStreamIO]]. Provides [[StreamSource]] instance. */
 object ZStreamIO:
@@ -66,10 +66,10 @@ object ZStreamIO:
     extension [A](stream: ZStreamIO[A])
       override def subscribe(
         onNext: A => Unit,
-        onError: TauriError => Unit,
+        onError: TausiError => Unit,
         onComplete: () => Unit
       ): StreamSubscription =
-        val effect: ZIO[Any, TauriError, Unit] =
+        val effect: ZIO[Any, TausiError, Unit] =
           stream
             .runForeach(a => ZIO.succeed(onNext(a)))
             .foldCauseZIO(
@@ -81,14 +81,14 @@ object ZStreamIO:
                       cause.dieOption match
                         case Some(defect) =>
                           // Defects are unexpected failures - wrap them
-                          onError(TauriError.StreamError(defect.getMessage, Some(defect)))
+                          onError(TausiError.StreamError(defect.getMessage, Some(defect)))
                         case None => onComplete() // Interrupted counts as complete
                 },
               success = _ => ZIO.succeed(onComplete())
             )
 
         // Fork is synchronous - starts fiber and returns handle immediately
-        val fibre: Fiber.Runtime[TauriError, Unit] = Unsafe.unsafe { (unsafe: Unsafe) =>
+        val fibre: Fiber.Runtime[TausiError, Unit] = Unsafe.unsafe { (unsafe: Unsafe) =>
           given Unsafe = unsafe
           runtime.unsafe.fork(effect)
         }

@@ -37,7 +37,7 @@ import tausi.api.core.invoke
   *
   * == Error Handling ==
   *
-  * Decoding errors are represented as values via `Either[TauriError.EventError, EventMessage[A]]`.
+  * Decoding errors are represented as values via `Either[TausiError.EventError, EventMessage[A]]`.
   * This follows the principle of errors-as-values and allows callers to handle decode failures
   * explicitly.
   *
@@ -90,7 +90,7 @@ object events:
     * }
     *   }}}
     */
-  def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+  def listen[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit)(using
     ev: Event[A],
     ec: ExecutionContext
   ): Future[EventHandle] =
@@ -107,7 +107,7 @@ object events:
     * @return
     *   Future containing the event handle for unlistening
     */
-  def listen[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+  def listen[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
     ev: Event[A],
     ec: ExecutionContext
   ): Future[EventHandle] =
@@ -125,7 +125,7 @@ object events:
     * @return
     *   Future containing the event handle
     */
-  def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit)(using
+  def once[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit)(using
     ev: Event[A],
     ec: ExecutionContext
   ): Future[EventHandle] =
@@ -142,7 +142,7 @@ object events:
     * @return
     *   Future containing the event handle
     */
-  def once[A](handler: Either[TauriError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
+  def once[A](handler: Either[TausiError.EventError, EventMessage[A]] => Unit, options: EventOptions)(using
     ev: Event[A],
     ec: ExecutionContext
   ): Future[EventHandle] =
@@ -222,7 +222,7 @@ object events:
 
   private def registerListener[T](
     name: String,
-    handler: Either[TauriError.EventError, EventMessage[T]] => Unit,
+    handler: Either[TausiError.EventError, EventMessage[T]] => Unit,
     options: EventOptions,
     autoUnlisten: Boolean
   )(using ec: ExecutionContext, decoder: Decoder[T]): Future[EventHandle] =
@@ -237,7 +237,7 @@ object events:
       val rawPayload = raw.selectDynamic("payload")
       val eventId = EventId.unsafe(raw.selectDynamic("id").asInstanceOf[Int])
       val eventName = raw.selectDynamic("event").asInstanceOf[String]
-      val result: Either[TauriError.EventError, EventMessage[T]] = decoder.decode(rawPayload) match
+      val result: Either[TausiError.EventError, EventMessage[T]] = decoder.decode(rawPayload) match
         case Right(payload) =>
           val event: EventMessage[T] = EventMessage(eventName, eventId, payload)
           if autoUnlisten then
@@ -245,13 +245,13 @@ object events:
             // We throw to surface this as an unhandled exception rather than silently ignore
             unlistenInternal(eventName, eventId, callbackId).onComplete {
               case Failure(e) =>
-                throw TauriError.EventError(eventName, s"Failed to auto-unlisten: ${e.getMessage}", Some(e))
+                throw TausiError.EventError(eventName, s"Failed to auto-unlisten: ${e.getMessage}", Some(e))
               case Success(_) => ()
             }
           Right(event)
         case Left(err) =>
           val errorMsg = s"Failed to decode event payload: $err"
-          Left(TauriError.EventError(eventName, errorMsg))
+          Left(TausiError.EventError(eventName, errorMsg))
       handler(result)
     // scalafix:on
     val rawId = TauriInternalsGlobal.transformCallback(jsHandler, false)
